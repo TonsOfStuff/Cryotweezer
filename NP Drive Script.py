@@ -40,9 +40,9 @@ class Page(tk.Frame):
         self.z_var = tk.StringVar(value="")
 
         # Labels
-        tk.Label(self, text="X:", font=("Arial", 16), padx=8).grid(row=0, column=0, sticky="e")
-        tk.Label(self, text="Y:", font=("Arial", 16), padx=8).grid(row=1, column=0, sticky="e")
-        tk.Label(self, text="Z:", font=("Arial", 16), padx=8).grid(row=2, column=0, sticky="e")
+        tk.Label(self, text="Channel 1:", font=("Arial", 16), padx=8).grid(row=0, column=0, sticky="e")
+        tk.Label(self, text="Channel 2:", font=("Arial", 16), padx=8).grid(row=1, column=0, sticky="e")
+        tk.Label(self, text="Channel 3:", font=("Arial", 16), padx=8).grid(row=2, column=0, sticky="e")
 
         # Editable Entry widgets
         self.x_entry = tk.Entry(self, textvariable=self.x_var, font=("Arial", 16), width=14)
@@ -162,8 +162,6 @@ def waitMovement(client, channel, target, tolerance = 0.00005, timeout = 10, int
         time.sleep(interval)
     print("Timed Out")
     return False
-
-
         
 def goToOriginalPosition(client):
     #Establish a setStopLimit
@@ -254,7 +252,7 @@ def traceSquare(client):
 
 def initWindow(client): #Tkinter Winodw Set-up
     root = tk.Tk()
-    root.title("Live XYZ Position")
+    root.title("Cryotweezer Space Editor")
     page = Page(root, client)
     page.pack(padx=12, pady=12)
     # Ensure socket closes on window close
