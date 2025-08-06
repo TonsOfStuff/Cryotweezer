@@ -29,6 +29,8 @@ from tkinter import messagebox
 amp = "300"   #amplitude param
 freq  = "1500"  #frequency param
 
+positions = []
+
 class Page(tk.Frame):
     def __init__(self, parent, client):
         super().__init__(parent)
@@ -38,26 +40,55 @@ class Page(tk.Frame):
         self.x_var = tk.StringVar(value="")
         self.y_var = tk.StringVar(value="")
         self.z_var = tk.StringVar(value="")
+        
+        self.xStepsVar = tk.StringVar(value="")
+        self.yStepsVar = tk.StringVar(value="")
+        self.zStepsVar = tk.StringVar(value="")
+        
+        self.ampVar = tk.StringVar(value="300")
+        self.freqVar = tk.StringVar(value="1500")
+        
+        #Checkbutton
+        self.takeSteps = tk.IntVar()
 
         # Labels
-        tk.Label(self, text="Channel 1:", font=("Arial", 16), padx=8).grid(row=0, column=0, sticky="e")
-        tk.Label(self, text="Channel 2:", font=("Arial", 16), padx=8).grid(row=1, column=0, sticky="e")
-        tk.Label(self, text="Channel 3:", font=("Arial", 16), padx=8).grid(row=2, column=0, sticky="e")
+        tk.Label(self, text="Go to:", font=("Arial", 18), padx=8).grid(row=0, column=1, sticky="w")
+        tk.Label(self, text="Steps:", font=("Arial", 18), padx=8).grid(row=0, column=2, sticky="w")
+        tk.Label(self, text="Misc:", font=("Arial", 18), padx=8).grid(row=0, column=4, sticky="w")
+        
+        tk.Label(self, text="X:", font=("Arial", 16), padx=8).grid(row=1, column=0, sticky="e")
+        tk.Label(self, text="Y:", font=("Arial", 16), padx=8).grid(row=2, column=0, sticky="e")
+        tk.Label(self, text="Z:", font=("Arial", 16), padx=8).grid(row=3, column=0, sticky="e")
+        
+        tk.Label(self, text="Amplitude:", font=("Arial", 16), padx=8).grid(row=1, column=3, stick="e")
+        tk.Label(self, text="Frequency:", font=("Arial", 16), padx=8).grid(row=2, column=3, stick="e")
 
         # Editable Entry widgets
         self.x_entry = tk.Entry(self, textvariable=self.x_var, font=("Arial", 16), width=14)
         self.y_entry = tk.Entry(self, textvariable=self.y_var, font=("Arial", 16), width=14)
         self.z_entry = tk.Entry(self, textvariable=self.z_var, font=("Arial", 16), width=14)
-        self.x_entry.grid(row=0, column=1, padx=6, pady=4, sticky="w")
-        self.y_entry.grid(row=1, column=1, padx=6, pady=4, sticky="w")
-        self.z_entry.grid(row=2, column=1, padx=6, pady=4, sticky="w")
+        self.x_entry.grid(row=1, column=1, padx=6, pady=4, sticky="w")
+        self.y_entry.grid(row=2, column=1, padx=6, pady=4, sticky="w")
+        self.z_entry.grid(row=3, column=1, padx=6, pady=4, sticky="w")
+        
+        self.xSteps = tk.Entry(self, textvariable=self.xStepsVar, font=("Arial", 16), width=14)
+        self.ySteps = tk.Entry(self, textvariable=self.yStepsVar, font=("Arial", 16), width=14)
+        self.zSteps = tk.Entry(self, textvariable=self.zStepsVar, font=("Arial", 16), width=14)
+        self.xSteps.grid(row=1, column=2, padx=6, pady=4, sticky="w")
+        self.ySteps.grid(row=2, column=2, padx=6, pady=4, sticky="w")
+        self.zSteps.grid(row=3, column=2, padx=6, pady=4, sticky="w")
+        
+        self.ampEntry = tk.Entry(self, textvariable=self.ampVar, font=("Arial", 16), width=8).grid(row=1, column=4, padx=8)
+        self.freqEntry = tk.Entry(self, textvariable=self.freqVar, font=("Arial", 16), width=8).grid(row=2, column=4, padx=8)
 
         # Buttons
-        tk.Button(self, text="Read Current", command=self.read_current).grid(row=3, column=0, pady=8, sticky="e")
+        tk.Button(self, text="Read Current", command=self.read_current, width=11).grid(row=4, column=1, pady=8, sticky="e")
         self.move_btn = tk.Button(self, text="Move to XYZ", command=self.move_to_inputs)
-        self.move_btn.grid(row=3, column=1, pady=8, sticky="w")
+        self.move_btn.grid(row=4, column=2, pady=8, sticky="w")
+        
+        self.stepsBool = tk.Checkbutton(self, text="Go Steps", variable=self.takeSteps, onvalue=1, offvalue=0).grid(row=3, column=4, padx=8, sticky="w")
 
-        # Optional: status label
+        # Status label
         self.status = tk.Label(self, text="", anchor="w")
         self.status.grid(row=4, column=0, columnspan=2, sticky="w", padx=4)
 
@@ -67,9 +98,9 @@ class Page(tk.Frame):
             x = getPos(self.client, 1)
             y = getPos(self.client, 2)
             z = getPos(self.client, 3)
-            self.x_var.set(f"{x:.6f}")
-            self.y_var.set(f"{y:.6f}")
-            self.z_var.set(f"{z:.6f}")
+            self.x_var.set(f"{x:.10f}")
+            self.y_var.set(f"{y:.10f}")
+            self.z_var.set(f"{z:.10f}")
             self.status.config(text="Read current positions.")
         except Exception as e:
             messagebox.showerror("Read error", str(e))
@@ -77,9 +108,40 @@ class Page(tk.Frame):
     def move_to_inputs(self):
         """Kick off a background move using the values from the entries."""
         try:
-            x_tgt = float(self.x_var.get().strip())
-            y_tgt = float(self.y_var.get().strip())
-            z_tgt = float(self.z_var.get().strip())
+            if (self.takeSteps.get() == 0):
+                #Get the entered values of x, y, z
+                tempX = self.x_var.get().strip()
+                tempY = self.y_var.get().strip()
+                tempZ = self.z_var.get().strip()
+                if (tempX == ""):
+                    tempX = getPos(self.client, 1)
+                if (tempY == ""):
+                    tempY = getPos(self.client, 2)
+                if (tempZ == ""):
+                    tempZ = getPos(self.client, 3)
+                
+                x_tgt = float(tempX)
+                y_tgt = float(tempY)
+                z_tgt = float(tempZ)
+            else:
+                #Get entered steps for x, y, z
+                tempX = self.xStepsVar.get().strip()
+                tempY = self.yStepsVar.get().strip()
+                tempZ = self.zStepsVar.get().strip()
+                if (tempX == ""):
+                    tempX = 0
+                if (tempY == ""):
+                    tempY = 0
+                if (tempZ == ""):
+                    tempZ = 0
+                
+                x_tgt = float(tempX)
+                y_tgt = float(tempY)
+                z_tgt = float(tempZ)
+            
+            #Get the amplitude and frequency from the amp and freq textbok
+            amp = float(self.ampVar.get().strip())
+            freq = float(self.freqVar.get().strip())
         except ValueError:
             messagebox.showwarning("Invalid input", "Please enter numeric X, Y, Z values.")
             return
@@ -88,7 +150,7 @@ class Page(tk.Frame):
         self.move_btn.config(state=tk.DISABLED)
         self.status.config(text="Moving...")
 
-        def _worker():
+        def goToPos():
             ok = True
             try:
                 # Move X (channel 1)
@@ -116,11 +178,49 @@ class Page(tk.Frame):
                 self.after(0, lambda: messagebox.showerror("Move error", str(e)))
                 ok = False
             finally:
-                self.after(0, lambda: self._finish_move(ok))
+                positions.append([x_tgt, y_tgt, z_tgt])
+                self.after(0, lambda: self.finishMove(ok))
+        
+        def goSteps():
+            ok = True
+            try:
+                # Move X (channel 1)
+                command(self.client, {"method": "setDriveChannel", "params": ["1"], "jsonrpc": "2.0", "id": 0})
+                command(self.client, {"method": "goStepsForward",
+                                      "params": ["1", f"{x_tgt}", amp, freq],
+                                      "jsonrpc": "2.0", "id": 0})
+                ok = ok and waitMovement(self.client, 1, x_tgt)
 
-        threading.Thread(target=_worker, daemon=True).start()
+                # Move Y (channel 2)
+                command(self.client, {"method": "setDriveChannel", "params": ["2"], "jsonrpc": "2.0", "id": 0})
+                command(self.client, {"method": "goPosition",
+                                      "params": ["2", f"{y_tgt}", amp, freq],
+                                      "jsonrpc": "2.0", "id": 0})
+                ok = ok and waitMovement(self.client, 2, y_tgt)
 
-    def _finish_move(self, ok: bool):
+                # Move Z (channel 3)
+                command(self.client, {"method": "setDriveChannel", "params": ["3"], "jsonrpc": "2.0", "id": 0})
+                command(self.client, {"method": "goPosition",
+                                      "params": ["3", f"{z_tgt}", amp, freq],
+                                      "jsonrpc": "2.0", "id": 0})
+                ok = ok and waitMovement(self.client, 3, z_tgt)
+
+            except Exception as e:
+                self.after(0, lambda: messagebox.showerror("Move error", str(e)))
+                ok = False
+            finally:
+                positions.append([x_tgt, y_tgt, z_tgt])
+                self.after(0, lambda: self.finishMove(ok))
+        
+        #Take steps is checked, use the steps command
+        if (self.takeSteps.get() == 1):
+            print(self.takeSteps.get())
+            #threading.Thread(target=goSteps, daemon=True).start()
+        else:
+            print(self.takeSteps.get())
+            #threading.Thread(target=goToPos, daemon=True).start()
+
+    def finishMove(self, ok: bool):
         """Re-enable UI and update status after move completes."""
         self.move_btn.config(state=tk.NORMAL)
         self.status.config(text="Move complete." if ok else "Move finished with errors.")
@@ -162,6 +262,8 @@ def waitMovement(client, channel, target, tolerance = 0.00005, timeout = 10, int
         time.sleep(interval)
     print("Timed Out")
     return False
+
+
         
 def goToOriginalPosition(client):
     #Establish a setStopLimit
@@ -252,7 +354,7 @@ def traceSquare(client):
 
 def initWindow(client): #Tkinter Winodw Set-up
     root = tk.Tk()
-    root.title("Cryotweezer Space Editor")
+    root.title("Live XYZ Position")
     page = Page(root, client)
     page.pack(padx=12, pady=12)
     # Ensure socket closes on window close
@@ -309,8 +411,8 @@ def main():
     print("Return value: " + str(resp["result"]) + " micrometers")
 
 if __name__ == "__main__":
-    try:
+    #try:
         main()
-    except:
-        print("Program closed")
+    #except:
+        #print("Program closed")
     
