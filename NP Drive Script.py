@@ -60,8 +60,8 @@ class Page(tk.Frame):
         tk.Label(self, text="Y:", font=("Arial", 16), padx=8).grid(row=2, column=0, sticky="e")
         tk.Label(self, text="Z:", font=("Arial", 16), padx=8).grid(row=3, column=0, sticky="e")
         
-        tk.Label(self, text="Amplitude:", font=("Arial", 16), padx=8).grid(row=1, column=3, stick="e")
-        tk.Label(self, text="Frequency:", font=("Arial", 16), padx=8).grid(row=2, column=3, stick="e")
+        tk.Label(self, text="Amp:", font=("Arial", 16), padx=8).grid(row=1, column=3, stick="e")
+        tk.Label(self, text="Freq:", font=("Arial", 16), padx=8).grid(row=2, column=3, stick="e")
 
         # Editable Entry widgets
         self.x_entry = tk.Entry(self, textvariable=self.x_var, font=("Arial", 16), width=14)
@@ -82,15 +82,17 @@ class Page(tk.Frame):
         self.freqEntry = tk.Entry(self, textvariable=self.freqVar, font=("Arial", 16), width=8).grid(row=2, column=4, padx=8)
 
         # Buttons
-        tk.Button(self, text="Read Current", command=self.read_current, width=11).grid(row=4, column=1, pady=8, sticky="e")
+        tk.Button(self, text="Read Current", command=self.read_current, width=11).grid(row=4, column=1, pady=8)
         self.move_btn = tk.Button(self, text="Move to XYZ", command=self.move_to_inputs)
-        self.move_btn.grid(row=4, column=2, pady=8, sticky="w")
+        self.move_btn.grid(row=4, column=2, pady=8)
+        
+        tk.Button(self, text="Stop Motion", command = self.stopMove).grid(row = 4, column=3, padx=8)
         
         self.stepsBool = tk.Checkbutton(self, text="Go Steps", variable=self.takeSteps, onvalue=1, offvalue=0).grid(row=3, column=4, padx=8, sticky="w")
 
         # Status label
         self.status = tk.Label(self, text="", anchor="w")
-        self.status.grid(row=4, column=0, columnspan=2, sticky="w", padx=4)
+        self.status.grid(row=5, column=0, columnspan=3, sticky="w", padx=4)
 
     def read_current(self):
         """Populate entries with current machine positions (channels 1–3)."""
@@ -101,7 +103,7 @@ class Page(tk.Frame):
             self.x_var.set(f"{x:.10f}")
             self.y_var.set(f"{y:.10f}")
             self.z_var.set(f"{z:.10f}")
-            self.status.config(text="Read current positions.")
+            self.status.config(text="Read current positions")
         except Exception as e:
             messagebox.showerror("Read error", str(e))
 
@@ -135,9 +137,9 @@ class Page(tk.Frame):
                 if (tempZ == ""):
                     tempZ = 0
                 
-                x_tgt = float(tempX)
-                y_tgt = float(tempY)
-                z_tgt = float(tempZ)
+                x_tgt = int(tempX)
+                y_tgt = int(tempY)
+                z_tgt = int(tempZ)
             
             #Get the amplitude and frequency from the amp and freq textbok
             amp = float(self.ampVar.get().strip())
@@ -182,28 +184,51 @@ class Page(tk.Frame):
                 self.after(0, lambda: self.finishMove(ok))
         
         def goSteps():
-            ok = True
+            ok = False
             try:
                 # Move X (channel 1)
-                command(self.client, {"method": "setDriveChannel", "params": ["1"], "jsonrpc": "2.0", "id": 0})
-                command(self.client, {"method": "goStepsForward",
-                                      "params": ["1", f"{x_tgt}", amp, freq],
-                                      "jsonrpc": "2.0", "id": 0})
-                ok = ok and waitMovement(self.client, 1, x_tgt)
+                if (x_tgt < 0):
+                    x = abs(x_tgt)
+                    command(self.client, {"method": "setDriveChannel", "params": ["1"], "jsonrpc": "2.0", "id": 0})
+                    command(self.client, {"method": "goStepsReverse",
+                                          "params": ["1", f"{x}", amp, freq],
+                                          "jsonrpc": "2.0", "id": 0})
+                else:
+                    command(self.client, {"method": "setDriveChannel", "params": ["1"], "jsonrpc": "2.0", "id": 0})
+                    command(self.client, {"method": "goStepsForward",
+                                          "params": ["1", f"{x_tgt}", amp, freq],
+                                          "jsonrpc": "2.0", "id": 0})
+                time.sleep(x_tgt / freq + 0.2)
+
 
                 # Move Y (channel 2)
-                command(self.client, {"method": "setDriveChannel", "params": ["2"], "jsonrpc": "2.0", "id": 0})
-                command(self.client, {"method": "goPosition",
-                                      "params": ["2", f"{y_tgt}", amp, freq],
-                                      "jsonrpc": "2.0", "id": 0})
-                ok = ok and waitMovement(self.client, 2, y_tgt)
+                if(y_tgt < 0):
+                    y = abs(y_tgt)
+                    command(self.client, {"method": "setDriveChannel", "params": ["2"], "jsonrpc": "2.0", "id": 0})
+                    command(self.client, {"method": "goStepsReverse",
+                                          "params": ["2", f"{y}", amp, freq],
+                                          "jsonrpc": "2.0", "id": 0})
+                else:
+                    command(self.client, {"method": "setDriveChannel", "params": ["2"], "jsonrpc": "2.0", "id": 0})
+                    command(self.client, {"method": "goStepsForward",
+                                          "params": ["2", f"{y_tgt}", amp, freq],
+                                          "jsonrpc": "2.0", "id": 0})
+                time.sleep(x_tgt / freq + 0.2)
 
                 # Move Z (channel 3)
-                command(self.client, {"method": "setDriveChannel", "params": ["3"], "jsonrpc": "2.0", "id": 0})
-                command(self.client, {"method": "goPosition",
-                                      "params": ["3", f"{z_tgt}", amp, freq],
-                                      "jsonrpc": "2.0", "id": 0})
-                ok = ok and waitMovement(self.client, 3, z_tgt)
+                if (z_tgt < 0):
+                    z = abs(z_tgt)
+                    command(self.client, {"method": "setDriveChannel", "params": ["3"], "jsonrpc": "2.0", "id": 0})
+                    command(self.client, {"method": "goStepsReverse",
+                                          "params": ["3", f"{z}", amp, freq],
+                                          "jsonrpc": "2.0", "id": 0})
+                else:
+                    command(self.client, {"method": "setDriveChannel", "params": ["3"], "jsonrpc": "2.0", "id": 0})
+                    command(self.client, {"method": "goStepsForward",
+                                          "params": ["3", f"{z_tgt}", amp, freq],
+                                          "jsonrpc": "2.0", "id": 0})
+                time.sleep(x_tgt / freq + 0.2)
+                ok = True
 
             except Exception as e:
                 self.after(0, lambda: messagebox.showerror("Move error", str(e)))
@@ -224,6 +249,10 @@ class Page(tk.Frame):
         """Re-enable UI and update status after move completes."""
         self.move_btn.config(state=tk.NORMAL)
         self.status.config(text="Move complete." if ok else "Move finished with errors.")
+    
+    def stopMove(self):
+        command(self.client, {"method": "stopMotion", "params": [], "jsonrpc": "2.0", "id": 0})
+        self.status.config(text="Stopped")
 
 
 
