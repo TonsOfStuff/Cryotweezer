@@ -195,17 +195,17 @@ class Page(tk.Frame):
         def goSteps(xStep, yStep, zStep, goTo = False, xTar = 0, yTar = 0, zTar = 0, cX = False, cY = False, cZ = False):
             ok = False
             if (goTo == True):
-                if (xTar > getPos(self.client, 1) and xStep > 0):
+                if (xTar > getPos(self.client, 1) and xStep < 0):
                     xStep = -xStep
-                if (xTar < getPos(self.client, 1) and xStep < 0):
+                if (xTar < getPos(self.client, 1) and xStep > 0):
                     xStep = -xStep
-                if (yTar < getPos(self.client, 2) and yStep < 0):
+                if (yTar > getPos(self.client, 2) and yStep < 0):
                     yStep = -yStep
-                if (yTar < getPos(self.client, 2) and yStep < 0):
+                if (yTar < getPos(self.client, 2) and yStep > 0):
                     yStep = -yStep
-                if (zTar < getPos(self.client, 3) and zStep < 0):
+                if (zTar > getPos(self.client, 3) and zStep < 0):
                     zStep = -zStep
-                if (zTar < getPos(self.client, 3) and zStep < 0):
+                if (zTar < getPos(self.client, 3) and zStep > 0):
                     zStep = -zStep
                     
                 #Check if axis movement is complete
@@ -216,17 +216,17 @@ class Page(tk.Frame):
                 if (cZ == True):
                     zStep = 0
             try:
-                # Move X (channel 1) if need to
+                # Move X (channel 1) if need to, x is reversed so reverse increases coord
                 if (xStep != 0):
                     if (xStep < 0):
                         x = abs(xStep)
                         command(self.client, {"method": "setDriveChannel", "params": ["1"], "jsonrpc": "2.0", "id": 0})
-                        command(self.client, {"method": "goStepsReverse",
+                        command(self.client, {"method": "goStepsForward",
                                               "params": ["1", f"{x}", amp, freq],
                                               "jsonrpc": "2.0", "id": 0})
                     else:
                         command(self.client, {"method": "setDriveChannel", "params": ["1"], "jsonrpc": "2.0", "id": 0})
-                        command(self.client, {"method": "goStepsForward",
+                        command(self.client, {"method": "goStepsReverse",
                                               "params": ["1", f"{xStep}", amp, freq],
                                               "jsonrpc": "2.0", "id": 0})
                     time.sleep(abs(xStep) / freq + 0.2)
@@ -277,19 +277,19 @@ class Page(tk.Frame):
             yComplete = False
             zComplete = False
             
-            tolerance = 0.000001
+            tolerance = 0.0000015
             for i in range(100):
                 if (self.stopped == True):
                     break
                 
                 goSteps(xStep, yStep, zStep, True, x_tgt, y_tgt, z_tgt, xComplete, yComplete, zComplete)
-                if (abs(getPos(self.client, 1) - x_tgt) < tolerance):
+                if (abs(getPos(self.client, 1) - x_tgt) < tolerance and xComplete == False):
                     print("x complete")
                     xComplete = True
-                if (abs(getPos(self.client, 2) - y_tgt) < tolerance):
+                if (abs(getPos(self.client, 2) - y_tgt) < tolerance and yComplete == False):
                     print("y complete")
                     yComplete = True
-                if (abs(getPos(self.client, 3) - z_tgt) < tolerance):
+                if (abs(getPos(self.client, 3) - z_tgt) < tolerance and zComplete == False):
                     print("z complete")
                     zComplete = True
                 
@@ -317,6 +317,7 @@ class Page(tk.Frame):
         self.stopped = True
         check = command(self.client, {"method": "stopMotion", "params": [], "jsonrpc": "2.0", "id": 0})
         print(check["result"])
+        self.move_btn.config(state=tk.NORMAL)
         self.status.config(text="Stopped")
 
 
@@ -412,34 +413,7 @@ def goToOriginalPosition(client):
     resp = command(client, rpc)
     waitMovement(client, 3, 0.003075189428376382)
 
-def traceSquare(client):
-    command(client, {"method": "goInterval",
-                     "params": ["3", "0.0001", "300", "1500"],
-                     "jsonrpc": "2.0", 
-                     "id": 0})
-    root = getPos(client, 3)
-    waitMovement(client, 3, root + 0.0001)
-    
-    command(client, {"method": "goInterval",
-                     "params": ["2", "0.0005", "300", "1500"],
-                     "jsonrpc": "2.0", 
-                     "id": 0})
-    root = getPos(client, 2)
-    waitMovement(client, 2, root + 0.0005)
-    
-    command(client, {"method": "goInterval",
-                     "params": ["3", "-0.0001", "300", "1500"],
-                     "jsonrpc": "2.0", 
-                     "id": 0})
-    root = getPos(client, 3)
-    waitMovement(client, 3, root - 0.0001)
-    
-    command(client, {"method": "goInterval",
-                     "params": ["2", "-0.0005", "300", "1500"],
-                     "jsonrpc": "2.0", 
-                     "id": 0})
-    root = getPos(client, 2)
-    waitMovement(client, 2, root - 0.0005)
+
 
 def initWindow(client): #Tkinter Winodw Set-up
     root = tk.Tk()
@@ -470,8 +444,7 @@ def main():
     print("Socket has been connected to", IP)
     
     #goToOriginalPosition(connect)
-    #traceSquare(connect)
-    
+
     initWindow(connect)
     
     rpc = {
