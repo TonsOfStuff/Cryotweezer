@@ -26,7 +26,7 @@ import threading
 import tkinter as tk
 from tkinter import messagebox
 
-amp = "300"   #amplitude param
+amp = "100"   #amplitude param
 freq  = "1500"  #frequency param
 
 positions = []
@@ -45,8 +45,8 @@ class Page(tk.Frame):
         self.yStepsVar = tk.StringVar(value="")
         self.zStepsVar = tk.StringVar(value="")
         
-        self.ampVar = tk.StringVar(value="300")
-        self.freqVar = tk.StringVar(value="1500")
+        self.ampVar = tk.StringVar(value=amp)
+        self.freqVar = tk.StringVar(value=freq)
         
         #Checkbutton
         self.takeSteps = tk.IntVar()
@@ -110,36 +110,36 @@ class Page(tk.Frame):
     def move_to_inputs(self):
         """Kick off a background move using the values from the entries."""
         try:
-            if (self.takeSteps.get() == 0):
-                #Get the entered values of x, y, z
-                tempX = self.x_var.get().strip()
-                tempY = self.y_var.get().strip()
-                tempZ = self.z_var.get().strip()
-                if (tempX == ""):
-                    tempX = getPos(self.client, 1)
-                if (tempY == ""):
-                    tempY = getPos(self.client, 2)
-                if (tempZ == ""):
-                    tempZ = getPos(self.client, 3)
-                
-                x_tgt = float(tempX)
-                y_tgt = float(tempY)
-                z_tgt = float(tempZ)
-            else:
-                #Get entered steps for x, y, z
-                tempX = self.xStepsVar.get().strip()
-                tempY = self.yStepsVar.get().strip()
-                tempZ = self.zStepsVar.get().strip()
-                if (tempX == ""):
-                    tempX = 0
-                if (tempY == ""):
-                    tempY = 0
-                if (tempZ == ""):
-                    tempZ = 0
-                
-                x_tgt = int(tempX)
-                y_tgt = int(tempY)
-                z_tgt = int(tempZ)
+            
+            #Get the entered values of x, y, z
+            tempX = self.x_var.get().strip()
+            tempY = self.y_var.get().strip()
+            tempZ = self.z_var.get().strip()
+            if (tempX == ""):
+                tempX = getPos(self.client, 1)
+            if (tempY == ""):
+                tempY = getPos(self.client, 2)
+            if (tempZ == ""):
+                tempZ = getPos(self.client, 3)
+            
+            x_tgt = float(tempX)
+            y_tgt = float(tempY)
+            z_tgt = float(tempZ)
+
+            #Get entered steps for x, y, z
+            tempX = self.xStepsVar.get().strip()
+            tempY = self.yStepsVar.get().strip()
+            tempZ = self.zStepsVar.get().strip()
+            if (tempX == ""):
+                tempX = 0
+            if (tempY == ""):
+                tempY = 0
+            if (tempZ == ""):
+                tempZ = 0
+            
+            xStep = int(tempX)
+            yStep = int(tempY)
+            zStep = int(tempZ)
             
             #Get the amplitude and frequency from the amp and freq textbok
             amp = float(self.ampVar.get().strip())
@@ -154,7 +154,12 @@ class Page(tk.Frame):
 
         def goToPos():
             ok = True
+            command(self.client, {"method": "setStopLimit", "params": ["1", "0.000001"], "jsonrpc": "2.0", "id": 0})
+            command(self.client, {"method": "setStopLimit", "params": ["2", "0.000001"], "jsonrpc": "2.0", "id": 0})
+            command(self.client, {"method": "setStopLimit", "params": ["3", "0.000001"], "jsonrpc": "2.0", "id": 0})
+            
             try:
+                print
                 # Move X (channel 1)
                 command(self.client, {"method": "setDriveChannel", "params": ["1"], "jsonrpc": "2.0", "id": 0})
                 command(self.client, {"method": "goPosition",
@@ -183,67 +188,115 @@ class Page(tk.Frame):
                 positions.append([x_tgt, y_tgt, z_tgt])
                 self.after(0, lambda: self.finishMove(ok))
         
-        def goSteps():
+        def goSteps(xStep, yStep, zStep, goTo = False, xTar = 0, yTar = 0, zTar = 0, cX = False, cY = False, cZ = False):
+
+            
             ok = False
+            if (goTo == True):
+                if (xTar > getPos(self.client, 1) and xStep > 0):
+                    xStep = -xStep
+                if (xTar < getPos(self.client, 1) and xStep < 0):
+                    xStep = -xStep
+                if (yTar < getPos(self.client, 2) and yStep < 0):
+                    yStep = -yStep
+                if (yTar < getPos(self.client, 2) and yStep < 0):
+                    yStep = -yStep
+                if (zTar < getPos(self.client, 3) and zStep < 0):
+                    zStep = -zStep
+                if (zTar < getPos(self.client, 3) and zStep < 0):
+                    zStep = -zStep
+                    
+                #Check if axis movement is complete
+                if (cX == True):
+                    xStep = 0
+                if (cY == True):
+                    yStep = 0
+                if (cZ == True):
+                    zStep = 0
             try:
-                # Move X (channel 1)
-                if (x_tgt < 0):
-                    x = abs(x_tgt)
-                    command(self.client, {"method": "setDriveChannel", "params": ["1"], "jsonrpc": "2.0", "id": 0})
-                    command(self.client, {"method": "goStepsReverse",
-                                          "params": ["1", f"{x}", amp, freq],
-                                          "jsonrpc": "2.0", "id": 0})
-                else:
-                    command(self.client, {"method": "setDriveChannel", "params": ["1"], "jsonrpc": "2.0", "id": 0})
-                    command(self.client, {"method": "goStepsForward",
-                                          "params": ["1", f"{x_tgt}", amp, freq],
-                                          "jsonrpc": "2.0", "id": 0})
-                time.sleep(x_tgt / freq + 0.2)
+                # Move X (channel 1) if need to
+                if (xStep != 0):
+                    if (xStep < 0):
+                        x = abs(xStep)
+                        command(self.client, {"method": "setDriveChannel", "params": ["1"], "jsonrpc": "2.0", "id": 0})
+                        command(self.client, {"method": "goStepsReverse",
+                                              "params": ["1", f"{x}", amp, freq],
+                                              "jsonrpc": "2.0", "id": 0})
+                    else:
+                        command(self.client, {"method": "setDriveChannel", "params": ["1"], "jsonrpc": "2.0", "id": 0})
+                        command(self.client, {"method": "goStepsForward",
+                                              "params": ["1", f"{xStep}", amp, freq],
+                                              "jsonrpc": "2.0", "id": 0})
+                    time.sleep(abs(xStep) / freq + 0.2)
 
 
                 # Move Y (channel 2)
-                if(y_tgt < 0):
-                    y = abs(y_tgt)
-                    command(self.client, {"method": "setDriveChannel", "params": ["2"], "jsonrpc": "2.0", "id": 0})
-                    command(self.client, {"method": "goStepsReverse",
-                                          "params": ["2", f"{y}", amp, freq],
-                                          "jsonrpc": "2.0", "id": 0})
-                else:
-                    command(self.client, {"method": "setDriveChannel", "params": ["2"], "jsonrpc": "2.0", "id": 0})
-                    command(self.client, {"method": "goStepsForward",
-                                          "params": ["2", f"{y_tgt}", amp, freq],
-                                          "jsonrpc": "2.0", "id": 0})
-                time.sleep(x_tgt / freq + 0.2)
+                if (yStep != 0)
+                    if(yStep < 0):
+                        y = abs(yStep)
+                        command(self.client, {"method": "setDriveChannel", "params": ["2"], "jsonrpc": "2.0", "id": 0})
+                        command(self.client, {"method": "goStepsReverse",
+                                              "params": ["2", f"{y}", amp, freq],
+                                              "jsonrpc": "2.0", "id": 0})
+                    else:
+                        command(self.client, {"method": "setDriveChannel", "params": ["2"], "jsonrpc": "2.0", "id": 0})
+                        command(self.client, {"method": "goStepsForward",
+                                              "params": ["2", f"{yStep}", amp, freq],
+                                              "jsonrpc": "2.0", "id": 0})
+                    time.sleep(abs(yStep) / freq + 0.2)
 
                 # Move Z (channel 3)
-                if (z_tgt < 0):
-                    z = abs(z_tgt)
-                    command(self.client, {"method": "setDriveChannel", "params": ["3"], "jsonrpc": "2.0", "id": 0})
-                    command(self.client, {"method": "goStepsReverse",
-                                          "params": ["3", f"{z}", amp, freq],
-                                          "jsonrpc": "2.0", "id": 0})
-                else:
-                    command(self.client, {"method": "setDriveChannel", "params": ["3"], "jsonrpc": "2.0", "id": 0})
-                    command(self.client, {"method": "goStepsForward",
-                                          "params": ["3", f"{z_tgt}", amp, freq],
-                                          "jsonrpc": "2.0", "id": 0})
-                time.sleep(x_tgt / freq + 0.2)
+                if (zStep != 0):
+                    if (zStep < 0):
+                        z = abs(zStep)
+                        command(self.client, {"method": "setDriveChannel", "params": ["3"], "jsonrpc": "2.0", "id": 0})
+                        command(self.client, {"method": "goStepsReverse",
+                                              "params": ["3", f"{z}", amp, freq],
+                                              "jsonrpc": "2.0", "id": 0})
+                    else:
+                        command(self.client, {"method": "setDriveChannel", "params": ["3"], "jsonrpc": "2.0", "id": 0})
+                        command(self.client, {"method": "goStepsForward",
+                                              "params": ["3", f"{zStep}", amp, freq],
+                                              "jsonrpc": "2.0", "id": 0})
+                    time.sleep(abs(zStep) / freq + 0.2)
                 ok = True
 
             except Exception as e:
-                self.after(0, lambda: messagebox.showerror("Move error", str(e)))
+                print(e)
+                self.after(0, lambda: messagebox.showerror("Move error"))
                 ok = False
             finally:
                 positions.append([x_tgt, y_tgt, z_tgt])
                 self.after(0, lambda: self.finishMove(ok))
         
+        def refinedGoTo():
+            xComplete = False
+            yComplete = False
+            zComplete = False
+            for i in range(100):
+                goSteps(xStep, yStep, zStep, True, x_tgt, y_tgt, z_tgt, xComplete, yComplete, zComplete)
+                if (abs(getPos(self.client, 1) - x_tgt) < 0.000001):
+                    print("x complete")
+                    xComplete = True
+                if (abs(getPos(self.client, 2) - y_tgt) < 0.000001):
+                    print("y complete")
+                    yComplete = True
+                if (abs(getPos(self.client, 3) - z_tgt) < 0.000001):
+                    print("z complete")
+                    zComplete = True
+                
+                if (xComplete and yComplete and zComplete):
+                    print("Complete")
+                    return
+                
+        
         #Take steps is checked, use the steps command
         if (self.takeSteps.get() == 1):
             print(self.takeSteps.get())
-            #threading.Thread(target=goSteps, daemon=True).start()
+            threading.Thread(target=goSteps, args=(xStep, yStep, zStep), daemon=True).start()
         else:
             print(self.takeSteps.get())
-            #threading.Thread(target=goToPos, daemon=True).start()
+            threading.Thread(target=refinedGoTo, daemon=True).start()
 
     def finishMove(self, ok: bool):
         """Re-enable UI and update status after move completes."""
@@ -276,17 +329,12 @@ def command(client, rpc):
     response_json = json.loads(response)
     return response_json
 
-def waitMovement(client, channel, target, tolerance = 0.00005, timeout = 10, interval = 0.05):
+def waitMovement(client, channel, target, tolerance = 0.00001, timeout = 10, interval = 0.05):
     start = time.time()
     while time.time() - start < timeout:
-        resp = command(client, {"method": "getPosition",
-                         "params": [str(channel)],
-                         "jsonrpc": "2.0",
-                         "id": 0
-                         })
-        status = resp["result"]
-        if (abs(target - status) <= tolerance):
-            print("Movement complete")
+        resp = command(client, {"method": "getStatusPositioning", "params": [], "jsonrpc": "2.0", "id": 0})
+        if not resp["result"]:
+            print("Positioning finished")
             return True
         time.sleep(interval)
     print("Timed Out")
