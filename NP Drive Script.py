@@ -231,7 +231,7 @@ class Page(tk.Frame):
 
 
                 # Move Y (channel 2)
-                if (yStep != 0)
+                if (yStep != 0):
                     if(yStep < 0):
                         y = abs(yStep)
                         command(self.client, {"method": "setDriveChannel", "params": ["2"], "jsonrpc": "2.0", "id": 0})
