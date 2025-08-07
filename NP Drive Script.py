@@ -50,6 +50,9 @@ class Page(tk.Frame):
         
         #Checkbutton
         self.takeSteps = tk.IntVar()
+        
+        #Stop check var
+        self.stopped = False
 
         # Labels
         tk.Label(self, text="Go to:", font=("Arial", 18), padx=8).grid(row=0, column=1, sticky="w")
@@ -109,22 +112,23 @@ class Page(tk.Frame):
 
     def move_to_inputs(self):
         """Kick off a background move using the values from the entries."""
+        self.stopped = False
         try:
-            
-            #Get the entered values of x, y, z
-            tempX = self.x_var.get().strip()
-            tempY = self.y_var.get().strip()
-            tempZ = self.z_var.get().strip()
-            if (tempX == ""):
-                tempX = getPos(self.client, 1)
-            if (tempY == ""):
-                tempY = getPos(self.client, 2)
-            if (tempZ == ""):
-                tempZ = getPos(self.client, 3)
-            
-            x_tgt = float(tempX)
-            y_tgt = float(tempY)
-            z_tgt = float(tempZ)
+            if (self.takeSteps.get() == 0):
+                #Get the entered values of x, y, z
+                tempX = self.x_var.get().strip()
+                tempY = self.y_var.get().strip()
+                tempZ = self.z_var.get().strip()
+                if (tempX == ""):
+                    tempX = getPos(self.client, 1)
+                if (tempY == ""):
+                    tempY = getPos(self.client, 2)
+                if (tempZ == ""):
+                    tempZ = getPos(self.client, 3)
+                
+                x_tgt = float(tempX)
+                y_tgt = float(tempY)
+                z_tgt = float(tempZ)
 
             #Get entered steps for x, y, z
             tempX = self.xStepsVar.get().strip()
@@ -189,8 +193,6 @@ class Page(tk.Frame):
                 self.after(0, lambda: self.finishMove(ok))
         
         def goSteps(xStep, yStep, zStep, goTo = False, xTar = 0, yTar = 0, zTar = 0, cX = False, cY = False, cZ = False):
-
-            
             ok = False
             if (goTo == True):
                 if (xTar > getPos(self.client, 1) and xStep > 0):
@@ -266,36 +268,44 @@ class Page(tk.Frame):
                 self.after(0, lambda: messagebox.showerror("Move error"))
                 ok = False
             finally:
-                positions.append([x_tgt, y_tgt, z_tgt])
-                self.after(0, lambda: self.finishMove(ok))
+                positions.append([float(getPos(self.client, 1)), float(getPos(self.client, 2)), float(getPos(self.client, 3))])
+                if (goTo == False):
+                    self.after(0, lambda: self.finishMove(ok))
         
         def refinedGoTo():
             xComplete = False
             yComplete = False
             zComplete = False
+            
+            tolerance = 0.000001
             for i in range(100):
+                if (self.stopped == True):
+                    break
+                
                 goSteps(xStep, yStep, zStep, True, x_tgt, y_tgt, z_tgt, xComplete, yComplete, zComplete)
-                if (abs(getPos(self.client, 1) - x_tgt) < 0.000001):
+                if (abs(getPos(self.client, 1) - x_tgt) < tolerance):
                     print("x complete")
                     xComplete = True
-                if (abs(getPos(self.client, 2) - y_tgt) < 0.000001):
+                if (abs(getPos(self.client, 2) - y_tgt) < tolerance):
                     print("y complete")
                     yComplete = True
-                if (abs(getPos(self.client, 3) - z_tgt) < 0.000001):
+                if (abs(getPos(self.client, 3) - z_tgt) < tolerance):
                     print("z complete")
                     zComplete = True
                 
                 if (xComplete and yComplete and zComplete):
                     print("Complete")
+                    self.after(0, lambda: self.finishMove(True))
                     return
+            
+            if (self.stopped != True):
+                self.after(0, lambda: self.finishMove(False))
                 
         
         #Take steps is checked, use the steps command
         if (self.takeSteps.get() == 1):
-            print(self.takeSteps.get())
             threading.Thread(target=goSteps, args=(xStep, yStep, zStep), daemon=True).start()
         else:
-            print(self.takeSteps.get())
             threading.Thread(target=refinedGoTo, daemon=True).start()
 
     def finishMove(self, ok: bool):
@@ -304,7 +314,9 @@ class Page(tk.Frame):
         self.status.config(text="Move complete." if ok else "Move finished with errors.")
     
     def stopMove(self):
-        command(self.client, {"method": "stopMotion", "params": [], "jsonrpc": "2.0", "id": 0})
+        self.stopped = True
+        check = command(self.client, {"method": "stopMotion", "params": [], "jsonrpc": "2.0", "id": 0})
+        print(check["result"])
         self.status.config(text="Stopped")
 
 
