@@ -101,21 +101,21 @@ class Page(tk.Frame):
         options = ["Zig Zag"]
         self.dropdown = ttk.Combobox(self, values=options, font=("Arial", 13), width=15)
         self.dropdown.set("Select preset")
-        self.dropdown.grid(column=1, row=7, padx=2, pady=5)
+        self.dropdown.grid(column=3, row=7, padx=2, pady=5)
         
         self.presetConfirm = tk.Button(self, text="Confirm", command=self.presetConfirm)
-        self.presetConfirm.grid(column=2, row=7, padx=2, pady=1, sticky="w")
+        self.presetConfirm.grid(column=4, row=7, padx=2, pady=1, sticky="w")
         
-        tk.Label(self, text="Grid Size:  ", font=("Arial", 13)).grid(column=1, row=8, sticky="e")
-        tk.Label(self, text="Step Size:  ", font=("Arial", 13)).grid(column=1, row=9, sticky="e")
+        tk.Label(self, text="Grid Size:  ", font=("Arial", 13)).grid(column=3, row=8, sticky="e")
+        tk.Label(self, text="Step Size:  ", font=("Arial", 13)).grid(column=3, row=9, sticky="e")
         
         self.gridSizeVar = tk.StringVar(value=100)
         self.gridSize = tk.Entry(self, textvariable=self.gridSizeVar, font=("Arial", 13), width=6)
-        self.gridSize.grid(column=2, row=8, padx=2, sticky="w")
+        self.gridSize.grid(column=4, row=8, padx=2, sticky="w")
         
         self.stepSizeVar = tk.StringVar(value=10)
         self.stepSize = tk.Entry(self, textvariable=self.stepSizeVar, font=("Arial", 13), width=6)
-        self.stepSize.grid(column=2, row=9, padx=2, sticky="w")
+        self.stepSize.grid(column=4, row=9, padx=2, sticky="w")
     
     def presetConfirm(self):
         val = self.dropdown.get()
