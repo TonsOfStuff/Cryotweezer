@@ -56,6 +56,9 @@ class Page(tk.Frame):
         
         #Stop check var
         self.stopped = False
+        
+        #Conversion of steps to meters
+        self.stepsToMicrons = {1:1, 2:1, 3:1}
 
         # Labels
         tk.Label(self, text="Go to:", font=("Arial", 18), padx=8).grid(row=0, column=1, sticky="w")
@@ -93,9 +96,11 @@ class Page(tk.Frame):
         self.move_btn.grid(row=4, column=2, pady=8)
         
         tk.Button(self, text="Stop Motion", command = self.stopMove).grid(row = 4, column=3, padx=8)
-        
+        tk.Button(self, text="Calibrate", command = self.calibrateAxes).grid(row=5, column=2, pady=8)
         self.stepsBool = tk.Checkbutton(self, text="Go Steps", variable=self.takeSteps, onvalue=1, offvalue=0).grid(row=3, column=4, padx=8, sticky="w")
-
+        
+        tk.Button(self, text="Remove pos", command = self.removePos).grid(row = 5, column=1)
+        
         # Status label
         self.status = tk.Label(self, text="", anchor="w")
         self.status.grid(row=5, column=0, columnspan=3, sticky="w", padx=4)
@@ -109,8 +114,8 @@ class Page(tk.Frame):
         self.presetConfirm = tk.Button(self, text="Confirm", command=self.presetConfirm)
         self.presetConfirm.grid(column=4, row=7, padx=2, pady=1, sticky="w")
         
-        tk.Label(self, text="Grid Size:  ", font=("Arial", 13)).grid(column=3, row=8, sticky="e")
-        tk.Label(self, text="Step Size:  ", font=("Arial", 13)).grid(column=3, row=9, sticky="e")
+        tk.Label(self, text="Grid Size (µm): ", font=("Arial", 13)).grid(column=3, row=8, sticky="e")
+        tk.Label(self, text="Step Size (µm): ", font=("Arial", 13)).grid(column=3, row=9, sticky="e")
         
         self.gridSizeVar = tk.StringVar(value=100)
         self.gridSize = tk.Entry(self, textvariable=self.gridSizeVar, font=("Arial", 13), width=6)
@@ -136,7 +141,11 @@ class Page(tk.Frame):
         self.ax.yaxis.set_major_locator(MaxNLocator(nbins=5))
         self.ax.zaxis.set_major_locator(MaxNLocator(nbins=5))
         
-
+    def removePos(self):
+        positions.clear()
+        self.ax.cla()
+        self.canvas.draw_idle()
+        self.status.config(text="Removed")
     
     def presetConfirm(self):
         val = self.dropdown.get()
@@ -391,7 +400,8 @@ class Page(tk.Frame):
         self.updatePlot()
     
     def updatePlot(self):
-        self.ax.clear()
+        self.ax.cla()
+        
         self.ax.set_xlabel("X Axis", labelpad=15)
         self.ax.set_ylabel("Y Axis", labelpad=15)
         self.ax.set_zlabel("Z Axis", labelpad=15)
@@ -409,11 +419,104 @@ class Page(tk.Frame):
         self.ax.zaxis.get_major_formatter().set_useOffset(False)
         self.ax.zaxis.get_major_formatter().set_scientific(False)
         
+        #self.ax.set_zlim(0, 0.01)
+        
         
         if positions:
             xs, ys, zs = zip(*positions)
             self.ax.plot(xs, ys, zs, marker='o')
         self.canvas.draw_idle()
+    
+    def calibrateAxes(self, stepSize=100, reps=10):
+        self.status.config(text="Calibrating...")
+        totalSteps = stepSize * reps
+        print("s")
+        self._calibration_axis = 0
+        self._calibration_step = 0
+        self._calibration_phase = "forward"  # or "backward"
+        self._calibration_reps = reps
+        self._calibration_stepSize = stepSize
+        self._calibration_startPos = None
+    
+        def start_next_move():
+            i = self._calibration_axis
+            count = self._calibration_step
+            phase = self._calibration_phase
+    
+            if i >= 3:
+                print(self.stepsToMicrons)
+                self.status.config(text="Calibration done")
+                return
+    
+            if count == 0:
+                self._calibration_startPos = getPos(self.client, i + 1)
+    
+            # Prepare step values
+            moveSteps = [0, 0, 0]
+            stepSize = self._calibration_stepSize
+            if (i == 2):
+                if (phase=="forward"):
+                    stepSize *= 10
+                if (phase=="backward"):
+                    stepSize = int(stepSize * 1.5)
+            if phase == "backward":
+                stepSize = -stepSize
+            moveSteps[i] = stepSize
+    
+            # Set steps and takeSteps flag
+            self.xStepsVar.set(str(moveSteps[0]))
+            self.yStepsVar.set(str(moveSteps[1]))
+            self.zStepsVar.set(str(moveSteps[2]))
+            self.takeSteps.set(1)
+    
+            # Launch move
+            self.move_to_inputs()
+            # Now wait for finishMove() to call back to continue
+    
+        def finish_callback(ok):
+            # Called by finishMove after each move finishes
+            if not ok:
+                self.status.config(text="Calibration error")
+                return
+    
+            count = self._calibration_step + 1
+            i = self._calibration_axis
+            phase = self._calibration_phase
+    
+            if count >= self._calibration_reps:
+                if phase == "forward":
+                    # Switch to backward moves
+                    self._calibration_phase = "backward"
+                    self._calibration_step = 0
+                    start_next_move()
+                else:
+                    # Backward phase done, calculate result and move on axis
+                    endPos = getPos(self.client, i + 1)
+                    distMoved = abs(endPos - self._calibration_startPos)
+                    sPM = (self._calibration_stepSize * self._calibration_reps) / (distMoved * 1e6) if distMoved != 0 else 0
+                    self.stepsToMicrons[i + 1] = sPM
+                    self._calibration_axis += 1
+                    self._calibration_phase = "forward"
+                    self._calibration_step = 0
+                    start_next_move()
+            else:
+                self._calibration_step = count
+                start_next_move()
+    
+        # Override your finishMove to chain calibration steps
+        old_finishMove = self.finishMove
+        def new_finishMove(ok):
+            finish_callback(ok)
+            old_finishMove(ok)
+        self.finishMove = new_finishMove
+    
+        # Start first move
+        start_next_move()
+
+
+
+
+    
     
     def drawZigZag(self, stepSize, gridSize, row=0, step=0, direction=1):
         if self.stopped:
@@ -426,7 +529,7 @@ class Page(tk.Frame):
     
         if step < gridSize:
             # Move along X axis
-            self.xStepsVar.set(stepSize * direction)
+            self.xStepsVar.set(int(stepSize * self.stepsToMicrons[1] * direction))
             self.yStepsVar.set(0)
             self.zStepsVar.set(0)
             self.move_to_inputs()
@@ -436,8 +539,8 @@ class Page(tk.Frame):
         else:
             # Move down one step in Z axis and switch direction
             self.xStepsVar.set(0)
-            self.yStepsVar.set(stepSize)
-            self.zStepsVar.set(stepSize)
+            self.yStepsVar.set(int(stepSize * self.stepsToMicrons[2]))
+            self.zStepsVar.set(int(stepSize * self.stepsToMicrons[3]))
             self.move_to_inputs()
     
             # Start next row, reverse direction
