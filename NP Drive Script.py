@@ -21,10 +21,13 @@ import time
 import tkinter as tk
 from tkinter import ttk
 import threading
-
-import threading
-import tkinter as tk
 from tkinter import messagebox
+import matplotlib
+matplotlib.use("TkAgg")
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from mpl_toolkits.mplot3d import Axes3D
+from matplotlib.ticker import MaxNLocator
 
 amp = "100"   #amplitude param
 freq  = "1500"  #frequency param
@@ -116,6 +119,24 @@ class Page(tk.Frame):
         self.stepSizeVar = tk.StringVar(value=10)
         self.stepSize = tk.Entry(self, textvariable=self.stepSizeVar, font=("Arial", 13), width=6)
         self.stepSize.grid(column=4, row=9, padx=2, sticky="w")
+        
+        
+        #3D Graph position
+        self.fig = plt.Figure(figsize=(5, 4), dpi=100)
+        self.ax = self.fig.add_subplot(111, projection="3d")
+        self.ax.set_xlabel("X Axis")
+        self.ax.set_ylabel("Y Axis")
+        self.ax.set_zlabel("Z Axis")
+        self.ax.set_title("Platform Path")
+        
+        self.canvas = FigureCanvasTkAgg(self.fig, master=self)
+        self.canvas.get_tk_widget().grid(row=10, column=0, columnspan=5, sticky="nsew", pady = 15)
+        
+        self.ax.xaxis.set_major_locator(MaxNLocator(nbins=5)) #Set ticks of each axis to a limit of 5 so that graph isn't crowded
+        self.ax.yaxis.set_major_locator(MaxNLocator(nbins=5))
+        self.ax.zaxis.set_major_locator(MaxNLocator(nbins=5))
+        
+
     
     def presetConfirm(self):
         val = self.dropdown.get()
@@ -135,7 +156,9 @@ class Page(tk.Frame):
         func = getattr(self, funcName, None)
         
         if callable(func):
-            func(gridSize, stepSize)
+            self.stopped = False
+            self.takeSteps.set(1)
+            func(stepSize, gridSize)
         else:
             print("Not a function")
 
@@ -311,7 +334,7 @@ class Page(tk.Frame):
                 self.after(0, lambda: messagebox.showerror("Move error"))
                 ok = False
             finally:
-                positions.append([float(getPos(self.client, 1)), float(getPos(self.client, 2)), float(getPos(self.client, 3))])
+                self.recordPosition(float(getPos(self.client, 1)), float(getPos(self.client, 2)), float(getPos(self.client, 3)))
                 if (goTo == False):
                     self.after(0, lambda: self.finishMove(ok))
         
@@ -359,37 +382,66 @@ class Page(tk.Frame):
     def stopMove(self):
         self.stopped = True
         check = command(self.client, {"method": "stopMotion", "params": [], "jsonrpc": "2.0", "id": 0})
-        print(check["result"])
+
         self.move_btn.config(state=tk.NORMAL)
         self.status.config(text="Stopped")
     
+    def recordPosition(self, x, y, z):
+        positions.append([x, y, z])
+        self.updatePlot()
     
-    def drawZigZag(self, stepSize, gridSize):
-        self.takeSteps.set(1)
-        for t in range(gridSize):
-            if self.stopped:
-                print("ZigZag stopped.")
-                break
-            
-            if (t == 0):
-                positions.append([float(getPos(self.client, 1)), float(getPos(self.client, 2)), float(getPos(self.client, 3))])
-            if (t % 2 == 0):
-                for i in range(gridSize):
-                    self.xStepsVar.set(stepSize)
-                    self.yStepsVar.set(0)
-                    self.zStepsVar.set(0)
-                    self.move_to_inputs()
-            else:
-                for i in range(gridSize):
-                    self.xStepsVar.set(-stepSize)
-                    self.yStepsVar.set(0)
-                    self.zStepsVar.set(0)
-                    self.move_to_inputs()
-            self.xStepsVar.set(0)
+    def updatePlot(self):
+        self.ax.clear()
+        self.ax.set_xlabel("X Axis", labelpad=15)
+        self.ax.set_ylabel("Y Axis", labelpad=15)
+        self.ax.set_zlabel("Z Axis", labelpad=15)
+        
+        self.ax.xaxis.set_major_locator(MaxNLocator(nbins=5))
+        self.ax.yaxis.set_major_locator(MaxNLocator(nbins=5))
+        self.ax.zaxis.set_major_locator(MaxNLocator(nbins=5))
+        
+        self.ax.xaxis.get_major_formatter().set_useOffset(False)
+        self.ax.xaxis.get_major_formatter().set_scientific(False)
+        
+        self.ax.yaxis.get_major_formatter().set_useOffset(False)
+        self.ax.yaxis.get_major_formatter().set_scientific(False)
+        
+        self.ax.zaxis.get_major_formatter().set_useOffset(False)
+        self.ax.zaxis.get_major_formatter().set_scientific(False)
+        
+        
+        if positions:
+            xs, ys, zs = zip(*positions)
+            self.ax.plot(xs, ys, zs, marker='o')
+        self.canvas.draw_idle()
+    
+    def drawZigZag(self, stepSize, gridSize, row=0, step=0, direction=1):
+        if self.stopped:
+            self.status.config(text="Zigzag stopped")
+            return
+    
+        if row >= gridSize:
+            self.status.config(text="Zigzag complete")
+            return
+    
+        if step < gridSize:
+            # Move along X axis
+            self.xStepsVar.set(stepSize * direction)
             self.yStepsVar.set(0)
+            self.zStepsVar.set(0)
+            self.move_to_inputs()
+            
+            # Schedule next step after a delay (adjust delay as needed)
+            self.after(1000, lambda: self.drawZigZag(stepSize, gridSize, row, step + stepSize, direction))
+        else:
+            # Move down one step in Z axis and switch direction
+            self.xStepsVar.set(0)
+            self.yStepsVar.set(stepSize)
             self.zStepsVar.set(stepSize)
             self.move_to_inputs()
-
+    
+            # Start next row, reverse direction
+            self.after(1000, lambda: self.drawZigZag(stepSize, gridSize, row + stepSize, 0, -direction))
 
 
 def getPos(client, channel):
@@ -404,7 +456,7 @@ def command(client, rpc):
     rpc_bytes = json.dumps(rpc).encode("utf-8")
     try:
         client.send(rpc_bytes)
-        response = client.recv(128)
+        response = client.recv(1024)
     
     except socket.error:
         print("Failed to send data")
