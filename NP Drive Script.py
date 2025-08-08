@@ -96,6 +96,48 @@ class Page(tk.Frame):
         # Status label
         self.status = tk.Label(self, text="", anchor="w")
         self.status.grid(row=5, column=0, columnspan=3, sticky="w", padx=4)
+        
+        #Existing preset GUI
+        options = ["Zig Zag"]
+        self.dropdown = ttk.Combobox(self, values=options, font=("Arial", 13), width=15)
+        self.dropdown.set("Select preset")
+        self.dropdown.grid(column=1, row=7, padx=2, pady=5)
+        
+        self.presetConfirm = tk.Button(self, text="Confirm", command=self.presetConfirm)
+        self.presetConfirm.grid(column=2, row=7, padx=2, pady=1, sticky="w")
+        
+        tk.Label(self, text="Grid Size:  ", font=("Arial", 13)).grid(column=1, row=8, sticky="e")
+        tk.Label(self, text="Step Size:  ", font=("Arial", 13)).grid(column=1, row=9, sticky="e")
+        
+        self.gridSizeVar = tk.StringVar(value=100)
+        self.gridSize = tk.Entry(self, textvariable=self.gridSizeVar, font=("Arial", 13), width=6)
+        self.gridSize.grid(column=2, row=8, padx=2, sticky="w")
+        
+        self.stepSizeVar = tk.StringVar(value=10)
+        self.stepSize = tk.Entry(self, textvariable=self.stepSizeVar, font=("Arial", 13), width=6)
+        self.stepSize.grid(column=2, row=9, padx=2, sticky="w")
+    
+    def presetConfirm(self):
+        val = self.dropdown.get()
+        try:
+            gridSize = int(self.gridSizeVar.get().strip())
+            stepSize = int(self.stepSizeVar.get().strip())
+        except:
+            messagebox.showwarning("Type Error", "Please enter integer numbers")
+            return
+        if (val == "Select preset"):
+            return
+        if (gridSize % stepSize != 0):
+            messagebox.showwarning("Invalid input", "Please use divisible step sizes and grid sizes")
+            return
+        
+        funcName = "draw" + val.replace(" ", "")
+        func = getattr(self, funcName, None)
+        
+        if callable(func):
+            func(gridSize, stepSize)
+        else:
+            print("Not a function")
 
     def read_current(self):
         """Populate entries with current machine positions (channels 1–3)."""
@@ -155,7 +197,8 @@ class Page(tk.Frame):
         # Disable the button during motion
         self.move_btn.config(state=tk.DISABLED)
         self.status.config(text="Moving...")
-
+        
+        #Defunct AND debilitated
         def goToPos():
             ok = True
             command(self.client, {"method": "setStopLimit", "params": ["1", "0.000001"], "jsonrpc": "2.0", "id": 0})
@@ -319,6 +362,33 @@ class Page(tk.Frame):
         print(check["result"])
         self.move_btn.config(state=tk.NORMAL)
         self.status.config(text="Stopped")
+    
+    
+    def drawZigZag(self, stepSize, gridSize):
+        self.takeSteps.set(1)
+        for t in range(gridSize):
+            if self.stopped:
+                print("ZigZag stopped.")
+                break
+            
+            if (t == 0):
+                positions.append([float(getPos(self.client, 1)), float(getPos(self.client, 2)), float(getPos(self.client, 3))])
+            if (t % 2 == 0):
+                for i in range(gridSize):
+                    self.xStepsVar.set(stepSize)
+                    self.yStepsVar.set(0)
+                    self.zStepsVar.set(0)
+                    self.move_to_inputs()
+            else:
+                for i in range(gridSize):
+                    self.xStepsVar.set(-stepSize)
+                    self.yStepsVar.set(0)
+                    self.zStepsVar.set(0)
+                    self.move_to_inputs()
+            self.xStepsVar.set(0)
+            self.yStepsVar.set(0)
+            self.zStepsVar.set(stepSize)
+            self.move_to_inputs()
 
 
 
@@ -342,7 +412,7 @@ def command(client, rpc):
     response_json = json.loads(response)
     return response_json
 
-def waitMovement(client, channel, target, tolerance = 0.00001, timeout = 10, interval = 0.05):
+def waitMovement(client, channel, target, tolerance = 0.00001, timeout = 10, interval = 0.05): #Debilitated
     start = time.time()
     while time.time() - start < timeout:
         resp = command(client, {"method": "getStatusPositioning", "params": [], "jsonrpc": "2.0", "id": 0})
@@ -352,8 +422,6 @@ def waitMovement(client, channel, target, tolerance = 0.00001, timeout = 10, int
         time.sleep(interval)
     print("Timed Out")
     return False
-
-
         
 def goToOriginalPosition(client):
     #Establish a setStopLimit
