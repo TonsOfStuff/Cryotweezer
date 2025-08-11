@@ -14,6 +14,9 @@ Notes: From a side-view
        Ch.3 goes up and down (y-axis)
        
        Model: B100
+       
+       Ch.1 is NOT inverted, while Ch.2 and Ch.3 both are
+           Refer to the settings menu on the panel
 """
 import json
 import socket
@@ -327,11 +330,13 @@ class Page(tk.Frame):
                     if (zStep < 0):
                         z = abs(zStep)
                         command(self.client, {"method": "setDriveChannel", "params": ["3"], "jsonrpc": "2.0", "id": 0})
+                        command(self.client, {"method": "goStepsReverse", "params": ["3", "0", amp, freq], "jsonrpc": "2.0", "id": 0}) #Prime the 3rd channel because the first move goes in the opposite direction for some reason. Hardware issue most likely
                         command(self.client, {"method": "goStepsReverse",
                                               "params": ["3", f"{z}", amp, freq],
                                               "jsonrpc": "2.0", "id": 0})
                     else:
                         command(self.client, {"method": "setDriveChannel", "params": ["3"], "jsonrpc": "2.0", "id": 0})
+                        command(self.client, {"method": "goStepsForward", "params": ["3", "0", amp, freq], "jsonrpc": "2.0", "id": 0}) #Prime the 3rd channel because the first move goes in the opposite direction for some reason. Hardware issue most likely
                         command(self.client, {"method": "goStepsForward",
                                               "params": ["3", f"{zStep}", amp, freq],
                                               "jsonrpc": "2.0", "id": 0})
