@@ -106,7 +106,7 @@ class Page(tk.Frame):
         
         # Status label
         self.status = tk.Label(self, text="", anchor="w")
-        self.status.grid(row=5, column=0, columnspan=3, sticky="w", padx=4)
+        self.status.grid(row=6, column=0, columnspan=3, sticky="w", padx=4)
         
         #Existing preset GUI
         options = ["Zig Zag"]
@@ -236,9 +236,9 @@ class Page(tk.Frame):
         #Defunct AND debilitated
         def goToPos():
             ok = True
-            command(self.client, {"method": "setStopLimit", "params": ["1", "0.000001"], "jsonrpc": "2.0", "id": 0})
-            command(self.client, {"method": "setStopLimit", "params": ["2", "0.000001"], "jsonrpc": "2.0", "id": 0})
-            command(self.client, {"method": "setStopLimit", "params": ["3", "0.000001"], "jsonrpc": "2.0", "id": 0})
+            command(self.client, {"method": "setStopLimit", "params": ["1", "0.0000001"], "jsonrpc": "2.0", "id": 0})
+            command(self.client, {"method": "setStopLimit", "params": ["2", "0.0000001"], "jsonrpc": "2.0", "id": 0})
+            command(self.client, {"method": "setStopLimit", "params": ["3", "0.0000001"], "jsonrpc": "2.0", "id": 0})
             
             try:
                 print
@@ -248,6 +248,7 @@ class Page(tk.Frame):
                                       "params": ["1", f"{x_tgt}", amp, freq],
                                       "jsonrpc": "2.0", "id": 0})
                 ok = ok and waitMovement(self.client, 1, x_tgt)
+                
 
                 # Move Y (channel 2)
                 command(self.client, {"method": "setDriveChannel", "params": ["2"], "jsonrpc": "2.0", "id": 0})
@@ -352,47 +353,22 @@ class Page(tk.Frame):
                 if (goTo == False):
                     self.after(0, lambda: self.finishMove(ok))
         
-        def refinedGoTo():
-            xComplete = False
-            yComplete = False
-            zComplete = False
-            
-            tolerance = 0.0000015
-            for i in range(100):
-                if (self.stopped == True):
-                    break
-                
-                goSteps(xStep, yStep, zStep, True, x_tgt, y_tgt, z_tgt, xComplete, yComplete, zComplete)
-                if (abs(getPos(self.client, 1) - x_tgt) < tolerance and xComplete == False):
-                    print("x complete")
-                    xComplete = True
-                if (abs(getPos(self.client, 2) - y_tgt) < tolerance and yComplete == False):
-                    print("y complete")
-                    yComplete = True
-                if (abs(getPos(self.client, 3) - z_tgt) < tolerance and zComplete == False):
-                    print("z complete")
-                    zComplete = True
-                
-                if (xComplete and yComplete and zComplete):
-                    print("Complete")
-                    self.after(0, lambda: self.finishMove(True))
-                    return
-                    
-            
-            if (self.stopped != True):
-                self.after(0, lambda: self.finishMove(False))
-                
         
         #Take steps is checked, use the steps command
         if (self.takeSteps.get() == 1):
             threading.Thread(target=goSteps, args=(xStep, yStep, zStep), daemon=True).start()
         else:
-            threading.Thread(target=refinedGoTo, daemon=True).start()
+            threading.Thread(target=goToPos, daemon=True).start()
 
     def finishMove(self, ok: bool):
-        """Re-enable UI and update status after move completes."""
         self.move_btn.config(state=tk.NORMAL)
-        self.status.config(text="Move complete." if ok else "Move finished with errors.")
+        if getattr(self, '_calibrating', False):
+            if hasattr(self, '_calibration_callback'):
+                self._calibration_callback(ok)
+        else:
+            """Re-enable UI and update status after move completes."""
+            self.move_btn.config(state=tk.NORMAL)
+            self.status.config(text="Move complete." if ok else "Move finished with errors.")
     
     def stopMove(self):
         self.stopped = True
@@ -435,11 +411,10 @@ class Page(tk.Frame):
     
     def calibrateAxes(self, stepSize=100, reps=10):
         self.status.config(text="Calibrating...")
-        totalSteps = stepSize * reps
-        print("s")
+        self._calibrating = True
         self._calibration_axis = 0
         self._calibration_step = 0
-        self._calibration_phase = "forward"  # or "backward"
+        self._calibration_phase = "forward"
         self._calibration_reps = reps
         self._calibration_stepSize = stepSize
         self._calibration_startPos = None
@@ -450,39 +425,39 @@ class Page(tk.Frame):
             phase = self._calibration_phase
     
             if i >= 3:
-                print(self.stepsToMicrons)
                 self.status.config(text="Calibration done")
+                self._calibrating = False
+                print(self.stepsToMicrons)
                 return
     
             if count == 0:
                 self._calibration_startPos = getPos(self.client, i + 1)
     
-            # Prepare step values
+            # Prepare move steps for this axis
             moveSteps = [0, 0, 0]
             stepSize = self._calibration_stepSize
-            if (i == 2):
-                if (phase=="forward"):
+            if i == 2:
+                if phase == "forward":
                     stepSize *= 10
-                if (phase=="backward"):
+                elif phase == "backward":
                     stepSize = int(stepSize * 1.5)
             if phase == "backward":
                 stepSize = -stepSize
             moveSteps[i] = stepSize
     
-            # Set steps and takeSteps flag
+            # Update entries and flag for stepping
             self.xStepsVar.set(str(moveSteps[0]))
             self.yStepsVar.set(str(moveSteps[1]))
             self.zStepsVar.set(str(moveSteps[2]))
             self.takeSteps.set(1)
     
-            # Launch move
+            # Trigger move
             self.move_to_inputs()
-            # Now wait for finishMove() to call back to continue
     
-        def finish_callback(ok):
-            # Called by finishMove after each move finishes
+        def calibration_finish_callback(ok):
             if not ok:
                 self.status.config(text="Calibration error")
+                self._calibrating = False
                 return
     
             count = self._calibration_step + 1
@@ -491,12 +466,10 @@ class Page(tk.Frame):
     
             if count >= self._calibration_reps:
                 if phase == "forward":
-                    # Switch to backward moves
                     self._calibration_phase = "backward"
                     self._calibration_step = 0
                     start_next_move()
                 else:
-                    # Backward phase done, calculate result and move on axis
                     endPos = getPos(self.client, i + 1)
                     distMoved = abs(endPos - self._calibration_startPos)
                     sPM = (self._calibration_stepSize * self._calibration_reps) / (distMoved * 1e6) if distMoved != 0 else 0
@@ -509,16 +482,17 @@ class Page(tk.Frame):
                 self._calibration_step = count
                 start_next_move()
     
-        # Override your finishMove to chain calibration steps
-        old_finishMove = self.finishMove
-        def new_finishMove(ok):
-            finish_callback(ok)
-            old_finishMove(ok)
-        self.finishMove = new_finishMove
+        # Save the callback so finishMove can call it
+        self._calibration_callback = calibration_finish_callback
     
-        # Start first move
+        # Start the first move
         start_next_move()
 
+
+
+
+    
+    
     def drawZigZag(self, stepSize, gridSize, row=0, step=0, direction=1):
         if self.stopped:
             self.status.config(text="Zigzag stopped")
@@ -549,7 +523,11 @@ class Page(tk.Frame):
 
 
 def getPos(client, channel):
-    resp = command(client, {"method": "getPosition", "params": [str(channel)], "jsonrpc": "2.0", "id": 0})
+    resp = command(client, {"method": "getPosition",
+                     "params": [str(channel)],
+                     "jsonrpc": "2.0",
+                     "id": 0
+                     })
     return resp["result"]
 
 def command(client, rpc):
@@ -564,12 +542,14 @@ def command(client, rpc):
     response_json = json.loads(response)
     return response_json
 
-def waitMovement(client, channel, target, tolerance = 0.00001, timeout = 10, interval = 0.05): #Debilitated
+def waitMovement(client, channel, target, tolerance = 0.00001, timeout = 10, interval = 0.05):
     start = time.time()
     while time.time() - start < timeout:
         resp = command(client, {"method": "getStatusPositioning", "params": [], "jsonrpc": "2.0", "id": 0})
+        print(resp["result"])
         if not resp["result"]:
             print("Positioning finished")
+            command(client, {"method": "holdPosition", "params": ["1", f"{target}", amp, 10], "jsonrpc": "2.0", "id": 0})
             return True
         time.sleep(interval)
     print("Timed Out")
