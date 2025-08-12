@@ -377,6 +377,7 @@ class Page(tk.Frame):
                     print("Complete")
                     self.after(0, lambda: self.finishMove(True))
                     return
+                    
             
             if (self.stopped != True):
                 self.after(0, lambda: self.finishMove(False))
@@ -518,11 +519,6 @@ class Page(tk.Frame):
         # Start first move
         start_next_move()
 
-
-
-
-    
-    
     def drawZigZag(self, stepSize, gridSize, row=0, step=0, direction=1):
         if self.stopped:
             self.status.config(text="Zigzag stopped")
@@ -553,11 +549,7 @@ class Page(tk.Frame):
 
 
 def getPos(client, channel):
-    resp = command(client, {"method": "getPosition",
-                     "params": [str(channel)],
-                     "jsonrpc": "2.0",
-                     "id": 0
-                     })
+    resp = command(client, {"method": "getPosition", "params": [str(channel)], "jsonrpc": "2.0", "id": 0})
     return resp["result"]
 
 def command(client, rpc):
