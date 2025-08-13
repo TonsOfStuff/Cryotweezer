@@ -119,6 +119,7 @@ class Page(tk.Frame):
         
         tk.Label(self, text="Grid Size (µm): ", font=("Arial", 13)).grid(column=3, row=8, sticky="e")
         tk.Label(self, text="Step Size (µm): ", font=("Arial", 13)).grid(column=3, row=9, sticky="e")
+        tk.Label(self, text="Time (s): ", font=("Arial", 13)).grid(column=3, row=9, sticky="e")
         
         self.gridSizeVar = tk.StringVar(value=100)
         self.gridSize = tk.Entry(self, textvariable=self.gridSizeVar, font=("Arial", 13), width=6)
@@ -127,6 +128,10 @@ class Page(tk.Frame):
         self.stepSizeVar = tk.StringVar(value=10)
         self.stepSize = tk.Entry(self, textvariable=self.stepSizeVar, font=("Arial", 13), width=6)
         self.stepSize.grid(column=4, row=9, padx=2, sticky="w")
+
+        self.timeBetweenVar = tk.StringVar(value=100)
+        self.timeBetween = tk.Entry(self, textvariable=self.timeBetweenVar, font=("Arial", 13), width=6)
+        self.timeBetween.grid(column=4, row=10, padx=2, sticky="w")
         
         
         #3D Graph position
@@ -138,7 +143,7 @@ class Page(tk.Frame):
         self.ax.set_title("Platform Path")
         
         self.canvas = FigureCanvasTkAgg(self.fig, master=self)
-        self.canvas.get_tk_widget().grid(row=10, column=0, columnspan=5, sticky="nsew", pady = 15)
+        self.canvas.get_tk_widget().grid(row=11, column=0, columnspan=5, sticky="nsew", pady = 15)
         
         self.ax.xaxis.set_major_locator(MaxNLocator(nbins=5)) #Set ticks of each axis to a limit of 5 so that graph isn't crowded
         self.ax.yaxis.set_major_locator(MaxNLocator(nbins=5))
@@ -155,6 +160,7 @@ class Page(tk.Frame):
         try:
             gridSize = int(self.gridSizeVar.get().strip())
             stepSize = int(self.stepSizeVar.get().strip())
+            time = 1000 * self.timeBetweenVar.get().strip()
         except:
             messagebox.showwarning("Type Error", "Please enter integer numbers")
             return
@@ -170,7 +176,7 @@ class Page(tk.Frame):
         if callable(func):
             self.stopped = False
             self.takeSteps.set(1)
-            func(stepSize, gridSize)
+            func(stepSize, gridSize, time)
         else:
             print("Not a function")
 
@@ -493,7 +499,7 @@ class Page(tk.Frame):
 
     
     
-    def drawZigZag(self, stepSize, gridSize, row=0, step=0, direction=1):
+    def drawZigZag(self, stepSize, gridSize, pause, row=0, step=0, direction=1):
         if self.stopped:
             self.status.config(text="Zigzag stopped")
             return
@@ -510,7 +516,7 @@ class Page(tk.Frame):
             self.move_to_inputs()
             
             # Schedule next step after a delay (adjust delay as needed)
-            self.after(1000, lambda: self.drawZigZag(stepSize, gridSize, row, step + stepSize, direction))
+            self.after(pause, lambda: self.drawZigZag(stepSize, gridSize, row, step + stepSize, direction))
         else:
             # Move down one step in Z axis and switch direction
             self.xStepsVar.set(0)
@@ -519,7 +525,7 @@ class Page(tk.Frame):
             self.move_to_inputs()
     
             # Start next row, reverse direction
-            self.after(1000, lambda: self.drawZigZag(stepSize, gridSize, row + stepSize, 0, -direction))
+            self.after(pause, lambda: self.drawZigZag(stepSize, gridSize, row + stepSize, 0, -direction))
 
 
 def getPos(client, channel):
