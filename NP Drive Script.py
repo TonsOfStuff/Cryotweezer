@@ -176,7 +176,7 @@ class Page(tk.Frame):
         if callable(func):
             self.stopped = False
             self.takeSteps.set(1)
-            func(stepSize, gridSize, time)
+            func(stepSize / 1000000, gridSize / 1000000, time)
         else:
             print("Not a function")
 
