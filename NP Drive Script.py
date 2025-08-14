@@ -499,33 +499,46 @@ class Page(tk.Frame):
 
     
     
-    def drawZigZag(self, stepSize, gridSize, pause, row=0, step=0, direction=1):
+    def drawZigZag(self, stepSize, gridSize, pause, row=0, col=0, direction=1, startPos=True, xPos=0, yPos=0, zPos=0):
         if self.stopped:
             self.status.config(text="Zigzag stopped")
             return
-    
-        if row >= gridSize:
+
+        # Compute first time to prevent build up of offset over time
+        if (startPos == True):
+            xPos = getPos(self.client, 1)
+            yPos = getPos(self.client, 2)
+            zPos = getPos(self.client, 3)
+            startPos = False
+
+        # Decide next step
+        cols_per_row = gridSize // stepSize
+        if col < cols_per_row - 1:
+            col += 1
+            xPos += stepSize * direction
+        else:
+            yPos += stepSize
+            zPos += stepSize
+            col = 0
+            row += 1
+            direction *= -1
+
+        # Update UI vars
+        self.x_var.set(xPos)
+        self.y_var.set(yPos)
+        self.z_var.set(zPos)
+
+        # Start threaded move
+        self.move_to_inputs()
+
+        # Stop when we finish all rows
+        if row >= gridSize // stepSize:
             self.status.config(text="Zigzag complete")
             return
-    
-        if step < gridSize:
-            # Move along X axis
-            self.xStepsVar.set(int(stepSize * self.stepsToMicrons[1] * direction))
-            self.yStepsVar.set(0)
-            self.zStepsVar.set(0)
-            self.move_to_inputs()
-            
-            # Schedule next step after a delay (adjust delay as needed)
-            self.after(pause, lambda: self.drawZigZag(stepSize, gridSize, row, step + stepSize, direction))
-        else:
-            # Move down one step in Z axis and switch direction
-            self.xStepsVar.set(0)
-            self.yStepsVar.set(int(stepSize * self.stepsToMicrons[2]))
-            self.zStepsVar.set(int(stepSize * self.stepsToMicrons[3]))
-            self.move_to_inputs()
-    
-            # Start next row, reverse direction
-            self.after(pause, lambda: self.drawZigZag(stepSize, gridSize, row + stepSize, 0, -direction))
+
+        # Schedule next zigzag step after pause
+        self.after(pause, lambda: self.drawZigZag(stepSize, gridSize, pause, row, col, direction, startPos, xPos, yPos, zPos))
+
 
 
 def getPos(client, channel):
