@@ -119,7 +119,7 @@ class Page(tk.Frame):
         
         tk.Label(self, text="Grid Size (µm): ", font=("Arial", 13)).grid(column=3, row=8, sticky="e")
         tk.Label(self, text="Step Size (µm): ", font=("Arial", 13)).grid(column=3, row=9, sticky="e")
-        tk.Label(self, text="Time (s): ", font=("Arial", 13)).grid(column=3, row=9, sticky="e")
+        tk.Label(self, text="Time (s): ", font=("Arial", 13)).grid(column=3, row=10, sticky="e")
         
         self.gridSizeVar = tk.StringVar(value=100)
         self.gridSize = tk.Entry(self, textvariable=self.gridSizeVar, font=("Arial", 13), width=6)
@@ -129,7 +129,7 @@ class Page(tk.Frame):
         self.stepSize = tk.Entry(self, textvariable=self.stepSizeVar, font=("Arial", 13), width=6)
         self.stepSize.grid(column=4, row=9, padx=2, sticky="w")
 
-        self.timeBetweenVar = tk.StringVar(value=100)
+        self.timeBetweenVar = tk.StringVar(value=1)
         self.timeBetween = tk.Entry(self, textvariable=self.timeBetweenVar, font=("Arial", 13), width=6)
         self.timeBetween.grid(column=4, row=10, padx=2, sticky="w")
         
@@ -160,7 +160,7 @@ class Page(tk.Frame):
         try:
             gridSize = int(self.gridSizeVar.get().strip())
             stepSize = int(self.stepSizeVar.get().strip())
-            time = 1000 * self.timeBetweenVar.get().strip()
+            time = float(self.timeBetweenVar.get().strip())
         except:
             messagebox.showwarning("Type Error", "Please enter integer numbers")
             return
@@ -176,7 +176,7 @@ class Page(tk.Frame):
         if callable(func):
             self.stopped = False
             self.takeSteps.set(1)
-            func(stepSize / 1000000, gridSize / 1000000, time)
+            func(stepSize, gridSize, time)
         else:
             print("Not a function")
 
@@ -306,12 +306,12 @@ class Page(tk.Frame):
                     if (xStep < 0):
                         x = abs(xStep)
                         command(self.client, {"method": "setDriveChannel", "params": ["1"], "jsonrpc": "2.0", "id": 0})
-                        command(self.client, {"method": "goStepsForward",
+                        command(self.client, {"method": "goStepsReverse",
                                               "params": ["1", f"{x}", amp, freq],
                                               "jsonrpc": "2.0", "id": 0})
                     else:
                         command(self.client, {"method": "setDriveChannel", "params": ["1"], "jsonrpc": "2.0", "id": 0})
-                        command(self.client, {"method": "goStepsReverse",
+                        command(self.client, {"method": "goStepsForward",
                                               "params": ["1", f"{xStep}", amp, freq],
                                               "jsonrpc": "2.0", "id": 0})
                     time.sleep(abs(xStep) / freq + 0.2)
@@ -337,13 +337,13 @@ class Page(tk.Frame):
                     if (zStep < 0):
                         z = abs(zStep)
                         command(self.client, {"method": "setDriveChannel", "params": ["3"], "jsonrpc": "2.0", "id": 0})
-                        command(self.client, {"method": "goStepsReverse", "params": ["3", "0", amp, freq], "jsonrpc": "2.0", "id": 0}) #Prime the 3rd channel because the first move goes in the opposite direction for some reason. Hardware issue most likely
+                        command(self.client, {"method": "goStepsReverse", "params": ["3", "1", amp, freq], "jsonrpc": "2.0", "id": 0}) #Prime the 3rd channel because the first move goes in the opposite direction for some reason. Hardware issue most likely
                         command(self.client, {"method": "goStepsReverse",
                                               "params": ["3", f"{z}", amp, freq],
                                               "jsonrpc": "2.0", "id": 0})
                     else:
                         command(self.client, {"method": "setDriveChannel", "params": ["3"], "jsonrpc": "2.0", "id": 0})
-                        command(self.client, {"method": "goStepsForward", "params": ["3", "0", amp, freq], "jsonrpc": "2.0", "id": 0}) #Prime the 3rd channel because the first move goes in the opposite direction for some reason. Hardware issue most likely
+                        command(self.client, {"method": "goStepsForward", "params": ["3", "1", amp, freq], "jsonrpc": "2.0", "id": 0}) #Prime the 3rd channel because the first move goes in the opposite direction for some reason. Hardware issue most likely
                         command(self.client, {"method": "goStepsForward",
                                               "params": ["3", f"{zStep}", amp, freq],
                                               "jsonrpc": "2.0", "id": 0})
@@ -499,45 +499,34 @@ class Page(tk.Frame):
 
     
     
-    def drawZigZag(self, stepSize, gridSize, pause, row=0, col=0, direction=1, startPos=True, xPos=0, yPos=0, zPos=0):
+    def drawZigZag(self, stepSize, gridSize, pause, row=0, step=0, direction=1):
         if self.stopped:
             self.status.config(text="Zigzag stopped")
             return
-
-        # Compute first time to prevent build up of offset over time
-        if (startPos == True):
-            xPos = getPos(self.client, 1)
-            yPos = getPos(self.client, 2)
-            zPos = getPos(self.client, 3)
-            startPos = False
-
-        # Decide next step
-        cols_per_row = gridSize // stepSize
-        if col < cols_per_row - 1:
-            col += 1
-            xPos += stepSize * direction
-        else:
-            yPos += stepSize
-            zPos += stepSize
-            col = 0
-            row += 1
-            direction *= -1
-
-        # Update UI vars
-        self.x_var.set(xPos)
-        self.y_var.set(yPos)
-        self.z_var.set(zPos)
-
-        # Start threaded move
-        self.move_to_inputs()
-
-        # Stop when we finish all rows
-        if row >= gridSize // stepSize:
+        
+        if row >= gridSize:
             self.status.config(text="Zigzag complete")
             return
 
-        # Schedule next zigzag step after pause
-        self.after(pause, lambda: self.drawZigZag(stepSize, gridSize, pause, row, col, direction, startPos, xPos, yPos, zPos))
+        if step < gridSize:
+            # Move along X axis
+            self.xStepsVar.set(int(stepSize * self.stepsToMicrons[1] * direction))
+            self.yStepsVar.set(0)
+            self.zStepsVar.set(0)
+            self.move_to_inputs()
+            
+            # Schedule next step after a delay (adjust delay as needed)
+            self.after(int(pause * 1000), lambda: self.drawZigZag(stepSize, gridSize, pause, row, step + stepSize, direction))
+            
+        else:
+            # Move down one step in Z axis and switch direction
+            self.xStepsVar.set(0)
+            self.yStepsVar.set(int(stepSize * self.stepsToMicrons[2]))
+            self.zStepsVar.set(int(stepSize * self.stepsToMicrons[3] * 10))
+            self.move_to_inputs()
+    
+            # Start next row, reverse direction
+            self.after(int(pause * 1000), lambda: self.drawZigZag(stepSize, gridSize, pause, row + stepSize, 0, -direction))
 
 
 
@@ -561,18 +550,46 @@ def command(client, rpc):
     response_json = json.loads(response)
     return response_json
 
-def waitMovement(client, channel, target, tolerance = 0.00001, timeout = 10, interval = 0.05):
+def waitMovement(client, channel, target, tolerance=1e-6, timeout=10, interval=0.05):
+    """
+    Wait until stage is either:
+      - at the same micron number (within tolerance), OR
+      - controller reports positioning has stopped.
+    """
     start = time.time()
     while time.time() - start < timeout:
-        resp = command(client, {"method": "getStatusPositioning", "params": [], "jsonrpc": "2.0", "id": 0})
-        print(resp["result"])
-        if not resp["result"]:
-            print("Positioning finished")
-            command(client, {"method": "holdPosition", "params": ["1", f"{target}", amp, 10], "jsonrpc": "2.0", "id": 0})
+        # Check if positioning still running
+        resp = command(client, {
+            "method": "getStatusPositioning",
+            "params": [],
+            "jsonrpc": "2.0",
+            "id": 0
+        })
+        busy = resp["result"]
+
+        # Get actual position
+        actual = float(getPos(client, channel))
+        error = abs(round(actual, 6) - round(target, 6))
+
+        print(f"Target={target:.6f}, Actual={actual:.6f}, Error={error:.6f}, Busy={busy}")
+
+        # --- Exit conditions ---
+        if error <= tolerance or not busy:
+            print("Stopping wait: position reached or movement stopped.")
+            command(client, {
+                "method": "stopPositioning",
+                "params": [],
+                "jsonrpc": "2.0",
+                "id": 0
+            })
+            print(getPos(client, channel))
             return True
+
         time.sleep(interval)
-    print("Timed Out")
+
+    print("Timed Out: did not settle within tolerance or stop flag.")
     return False
+
         
 def goToOriginalPosition(client):
     #Establish a setStopLimit
