@@ -149,13 +149,13 @@ class Page(tk.Frame):
         self.ax.yaxis.set_major_locator(MaxNLocator(nbins=5))
         self.ax.zaxis.set_major_locator(MaxNLocator(nbins=5))
         
-    def removePos(self):
+    def removePos(self): #Resets the position array
         positions.clear()
         self.ax.cla()
         self.canvas.draw_idle()
         self.status.config(text="Removed")
     
-    def presetConfirm(self):
+    def presetConfirm(self): #Confirms your selection of the shape and gets the necessary parameters like gridSize and stepSize
         val = self.dropdown.get()
         try:
             gridSize = int(self.gridSizeVar.get().strip())
@@ -171,22 +171,21 @@ class Page(tk.Frame):
             return
         
         funcName = "draw" + val.replace(" ", "")
-        func = getattr(self, funcName, None)
+        func = getattr(self, funcName, None) #Gets the function by adding a draw in front of the preset name
         
-        if callable(func):
+        if callable(func): #Checks if the function that you got is actually callable
             self.stopped = False
             self.takeSteps.set(1)
             func(stepSize, gridSize, time)
         else:
             print("Not a function")
 
-    def read_current(self):
-        """Populate entries with current machine positions (channels 1–3)."""
+    def read_current(self): #Reads the current position
         try:
             x = getPos(self.client, 1)
             y = getPos(self.client, 2)
             z = getPos(self.client, 3)
-            self.x_var.set(f"{x:.10f}")
+            self.x_var.set(f"{x:.10f}") #Sets each xyz to the variable with 10 decimal places
             self.y_var.set(f"{y:.10f}")
             self.z_var.set(f"{z:.10f}")
             self.status.config(text="Read current positions")
@@ -194,15 +193,15 @@ class Page(tk.Frame):
             messagebox.showerror("Read error", str(e))
 
     def move_to_inputs(self):
-        """Kick off a background move using the values from the entries."""
+        #Kick off a background move using the values from the entries
         self.stopped = False
         try:
             if (self.takeSteps.get() == 0):
-                #Get the entered values of x, y, z
+                #Get the entered values of x, y, z if NOT taking steps and instead moving to a given coordinate
                 tempX = self.x_var.get().strip()
                 tempY = self.y_var.get().strip()
                 tempZ = self.z_var.get().strip()
-                if (tempX == ""):
+                if (tempX == ""): #If x,y,z is empty, then it defaults to the position they're already in
                     tempX = getPos(self.client, 1)
                 if (tempY == ""):
                     tempY = getPos(self.client, 2)
@@ -212,23 +211,23 @@ class Page(tk.Frame):
                 x_tgt = float(tempX)
                 y_tgt = float(tempY)
                 z_tgt = float(tempZ)
-
-            #Get entered steps for x, y, z
-            tempX = self.xStepsVar.get().strip()
-            tempY = self.yStepsVar.get().strip()
-            tempZ = self.zStepsVar.get().strip()
-            if (tempX == ""):
-                tempX = 0
-            if (tempY == ""):
-                tempY = 0
-            if (tempZ == ""):
-                tempZ = 0
+            else:
+                #Get entered steps for x, y, z if taking an amount of steps rather than moving to a coordinate
+                tempX = self.xStepsVar.get().strip() 
+                tempY = self.yStepsVar.get().strip()
+                tempZ = self.zStepsVar.get().strip()
+                if (tempX == ""):
+                    tempX = 0 #Defualts to 0 steps if nothing is entered
+                if (tempY == ""):
+                    tempY = 0
+                if (tempZ == ""):
+                    tempZ = 0
+                
+                xStep = int(tempX)
+                yStep = int(tempY)
+                zStep = int(tempZ)
             
-            xStep = int(tempX)
-            yStep = int(tempY)
-            zStep = int(tempZ)
-            
-            #Get the amplitude and frequency from the amp and freq textbok
+            #Get the amplitude and frequency from the amp and freq textbox
             amp = float(self.ampVar.get().strip())
             freq = float(self.freqVar.get().strip())
         except ValueError:
@@ -239,8 +238,7 @@ class Page(tk.Frame):
         self.move_btn.config(state=tk.DISABLED)
         self.status.config(text="Moving...")
         
-        #Defunct AND debilitated
-        def goToPos():
+        def goToPos(): #Goes to a given coordinate
             ok = True
             command(self.client, {"method": "setStopLimit", "params": ["1", "0.0000001"], "jsonrpc": "2.0", "id": 0})
             command(self.client, {"method": "setStopLimit", "params": ["2", "0.0000001"], "jsonrpc": "2.0", "id": 0})
@@ -253,7 +251,7 @@ class Page(tk.Frame):
                 command(self.client, {"method": "goPosition",
                                       "params": ["1", f"{x_tgt}", amp, freq],
                                       "jsonrpc": "2.0", "id": 0})
-                ok = ok and waitMovement(self.client, 1, x_tgt)
+                ok = ok and waitMovement(self.client, 1, x_tgt) #Waits for movement to finish before moving on so to not overflow the drive with unfinished commands, ok variable set to know if any one of the waitMovements fails, thus showing in the it in the UI
                 
 
                 # Move Y (channel 2)
@@ -274,36 +272,15 @@ class Page(tk.Frame):
                 self.after(0, lambda: messagebox.showerror("Move error", str(e)))
                 ok = False
             finally:
-                positions.append([x_tgt, y_tgt, z_tgt])
-                self.after(0, lambda: self.finishMove(ok))
+                self.recordPosition(x_tgt, y_tgt, z_tgt) #Records the position and updates plot
+                self.after(0, lambda: self.finishMove(ok)) #Runs finishMove which reactivates the UI
         
-        def goSteps(xStep, yStep, zStep, goTo = False, xTar = 0, yTar = 0, zTar = 0, cX = False, cY = False, cZ = False):
+        def goSteps(xStep, yStep, zStep):
             ok = False
-            if (goTo == True):
-                if (xTar > getPos(self.client, 1) and xStep < 0):
-                    xStep = -xStep
-                if (xTar < getPos(self.client, 1) and xStep > 0):
-                    xStep = -xStep
-                if (yTar > getPos(self.client, 2) and yStep < 0):
-                    yStep = -yStep
-                if (yTar < getPos(self.client, 2) and yStep > 0):
-                    yStep = -yStep
-                if (zTar > getPos(self.client, 3) and zStep < 0):
-                    zStep = -zStep
-                if (zTar < getPos(self.client, 3) and zStep > 0):
-                    zStep = -zStep
-                    
-                #Check if axis movement is complete
-                if (cX == True):
-                    xStep = 0
-                if (cY == True):
-                    yStep = 0
-                if (cZ == True):
-                    zStep = 0
             try:
-                # Move X (channel 1) if need to, x is reversed so reverse increases coord
-                if (xStep != 0):
-                    if (xStep < 0):
+                # Move X (channel 1)
+                if (xStep != 0): #If step amount if 0, then no movement occurs for this stage
+                    if (xStep < 0): #If negative steps, then moves the stage in reverse
                         x = abs(xStep)
                         command(self.client, {"method": "setDriveChannel", "params": ["1"], "jsonrpc": "2.0", "id": 0})
                         command(self.client, {"method": "goStepsReverse",
@@ -314,12 +291,12 @@ class Page(tk.Frame):
                         command(self.client, {"method": "goStepsForward",
                                               "params": ["1", f"{xStep}", amp, freq],
                                               "jsonrpc": "2.0", "id": 0})
-                    time.sleep(abs(xStep) / freq + 0.2)
+                    time.sleep(abs(xStep) / freq + 0.2) #How long the step will take can be calculated with this equation with an extra 0.2 seconds for padding
 
 
                 # Move Y (channel 2)
-                if (yStep != 0):
-                    if(yStep < 0):
+                if (yStep != 0): #If step amount if 0, then no movement occurs for this stage
+                    if(yStep < 0): #If negative steps, then moves the stage in reverse
                         y = abs(yStep)
                         command(self.client, {"method": "setDriveChannel", "params": ["2"], "jsonrpc": "2.0", "id": 0})
                         command(self.client, {"method": "goStepsReverse",
@@ -330,11 +307,11 @@ class Page(tk.Frame):
                         command(self.client, {"method": "goStepsForward",
                                               "params": ["2", f"{yStep}", amp, freq],
                                               "jsonrpc": "2.0", "id": 0})
-                    time.sleep(abs(yStep) / freq + 0.2)
+                    time.sleep(abs(yStep) / freq + 0.2) #How long the step will take can be calculated with this equation with an extra 0.2 seconds for padding
 
                 # Move Z (channel 3)
-                if (zStep != 0):
-                    if (zStep < 0):
+                if (zStep != 0): #If step amount if 0, then no movement occurs for this stage
+                    if (zStep < 0): #If negative steps, then moves the stage in reverse
                         z = abs(zStep)
                         command(self.client, {"method": "setDriveChannel", "params": ["3"], "jsonrpc": "2.0", "id": 0})
                         command(self.client, {"method": "goStepsReverse", "params": ["3", "1", amp, freq], "jsonrpc": "2.0", "id": 0}) #Prime the 3rd channel because the first move goes in the opposite direction for some reason. Hardware issue most likely
@@ -347,7 +324,7 @@ class Page(tk.Frame):
                         command(self.client, {"method": "goStepsForward",
                                               "params": ["3", f"{zStep}", amp, freq],
                                               "jsonrpc": "2.0", "id": 0})
-                    time.sleep(abs(zStep) / freq + 0.2)
+                    time.sleep(abs(zStep) / freq + 0.2) #How long the step will take can be calculated with this equation with an extra 0.2 seconds for padding
                 ok = True
 
             except Exception as e:
@@ -356,40 +333,44 @@ class Page(tk.Frame):
                 ok = False
             finally:
                 self.recordPosition(float(getPos(self.client, 1)), float(getPos(self.client, 2)), float(getPos(self.client, 3)))
-                if (goTo == False):
-                    self.after(0, lambda: self.finishMove(ok))
+                self.after(0, lambda: self.finishMove(ok))
         
         
         #Take steps is checked, use the steps command
-        if (self.takeSteps.get() == 1):
+        if (self.takeSteps.get() == 1): #If user checks takeSteps, that means no coordinates are used and instead steps are taken
             threading.Thread(target=goSteps, args=(xStep, yStep, zStep), daemon=True).start()
         else:
             threading.Thread(target=goToPos, daemon=True).start()
 
     def finishMove(self, ok: bool):
+        #Function called when movement is finished
         self.move_btn.config(state=tk.NORMAL)
-        if getattr(self, '_calibrating', False):
+        if getattr(self, '_calibrating', False): #Checks if calibration is finished because it has a different finish than normal movement
             if hasattr(self, '_calibration_callback'):
-                self._calibration_callback(ok)
+                self._calibration_callback(ok) #Runs calibration_finish_callback
         else:
-            """Re-enable UI and update status after move completes."""
+            #Re-enable UI and update status after move completes
             self.move_btn.config(state=tk.NORMAL)
             self.status.config(text="Move complete." if ok else "Move finished with errors.")
     
     def stopMove(self):
+        #Stops any movement
         self.stopped = True
-        check = command(self.client, {"method": "stopMotion", "params": [], "jsonrpc": "2.0", "id": 0})
-
+        command(self.client, {"method": "stopMotion", "params": [], "jsonrpc": "2.0", "id": 0})
         self.move_btn.config(state=tk.NORMAL)
         self.status.config(text="Stopped")
     
     def recordPosition(self, x, y, z):
+        #Appends the given position into position array
         positions.append([x, y, z])
+        #Updates the live plot
         self.updatePlot()
     
     def updatePlot(self):
+        #Clears the plot
         self.ax.cla()
         
+        #Sets up of axes with positions used as a the points
         self.ax.set_xlabel("X Axis", labelpad=15)
         self.ax.set_ylabel("Y Axis", labelpad=15)
         self.ax.set_zlabel("Z Axis", labelpad=15)
@@ -406,123 +387,159 @@ class Page(tk.Frame):
         
         self.ax.zaxis.get_major_formatter().set_useOffset(False)
         self.ax.zaxis.get_major_formatter().set_scientific(False)
-        
-        #self.ax.set_zlim(0, 0.01)
-        
-        
+                
         if positions:
             xs, ys, zs = zip(*positions)
             self.ax.plot(xs, ys, zs, marker='o')
         self.canvas.draw_idle()
     
     def calibrateAxes(self, stepSize=100, reps=10):
+        # Update GUI status to show calibration is running
         self.status.config(text="Calibrating...")
         self._calibrating = True
-        self._calibration_axis = 0
-        self._calibration_step = 0
-        self._calibration_phase = "forward"
-        self._calibration_reps = reps
-        self._calibration_stepSize = stepSize
-        self._calibration_startPos = None
-    
+
+        # State variables to keep track of which axis, step, and direction we’re in
+        self._calibration_axis = 0      # Which axis is being calibrated (0 = x, 1 = y, 2 = z)
+        self._calibration_step = 0      # Current step within this axis calibration
+        self._calibration_phase = "forward"  # "forward" (positive) or "backward" (negative) stepping
+        self._calibration_reps = reps        # Number of steps to take per phase
+        self._calibration_stepSize = stepSize # Step size per move
+        self._calibration_startPos = None     # Where the axis started before stepping
+
+        # Reset stop flag — if set to True externally, calibration will halt
+        self.stopped = False
+        
         def start_next_move():
-            i = self._calibration_axis
-            count = self._calibration_step
+            """Schedules the next move in the calibration sequence"""
+            if self.stopped == True:   # Allow user to abort calibration
+                return
+
+            i = self._calibration_axis     # Current axis index
+            count = self._calibration_step # How many steps we’ve done in this phase
             phase = self._calibration_phase
-    
+
+            # If all 3 axes are done → calibration finished
             if i >= 3:
                 self.status.config(text="Calibration done")
                 self._calibrating = False
-                print(self.stepsToMicrons)
+                print(self.stepsToMicrons) # Print calibration results
                 return
-    
+
+            # Record the starting position for this axis (before moving)
             if count == 0:
                 self._calibration_startPos = getPos(self.client, i + 1)
-    
-            # Prepare move steps for this axis
-            moveSteps = [0, 0, 0]
+
+            # Build the movement command for the current axis
+            moveSteps = [0, 0, 0]           # Reset move steps for all axes
             stepSize = self._calibration_stepSize
+
+            # Special handling for z-axis (axis index 2):
+            # → Increase step size for forward to avoid jitter
+            # → Increase step size for backward slightly differently
             if i == 2:
                 if phase == "forward":
                     stepSize *= 10
                 elif phase == "backward":
                     stepSize = int(stepSize * 1.5)
+
+            # If going backward, invert step size
             if phase == "backward":
                 stepSize = -stepSize
+
+            # Apply step size to the active axis
             moveSteps[i] = stepSize
-    
-            # Update entries and flag for stepping
+
+            # Update GUI entry boxes with step sizes (so user sees what’s happening)
             self.xStepsVar.set(str(moveSteps[0]))
             self.yStepsVar.set(str(moveSteps[1]))
             self.zStepsVar.set(str(moveSteps[2]))
+
+            # Signal that steps are ready to be taken
             self.takeSteps.set(1)
-    
-            # Trigger move
+
+            # Actually trigger the move
             self.move_to_inputs()
-    
+        
         def calibration_finish_callback(ok):
-            if not ok:
+            """Called after each move finishes to schedule next step or finish calibration"""
+            if not ok:  # If a move failed
                 self.status.config(text="Calibration error")
                 self._calibrating = False
                 return
-    
-            count = self._calibration_step + 1
-            i = self._calibration_axis
-            phase = self._calibration_phase
-    
+
+            count = self._calibration_step + 1  # Step count for this phase
+            i = self._calibration_axis          # Current axis
+            phase = self._calibration_phase     # Current phase (forward/backward)
+
+            # If we’ve completed enough repetitions for this phase
             if count >= self._calibration_reps:
                 if phase == "forward":
+                    # Switch to backward phase and restart step counter
                     self._calibration_phase = "backward"
                     self._calibration_step = 0
                     start_next_move()
                 else:
+                    # Done with forward+backward → measure how far axis actually moved
                     endPos = getPos(self.client, i + 1)
                     distMoved = abs(endPos - self._calibration_startPos)
+
+                    # Calculate steps-per-micron (calibration factor)
+                    # Formula: (total steps taken) / (distance moved in microns)
                     sPM = (self._calibration_stepSize * self._calibration_reps) / (distMoved * 1e6) if distMoved != 0 else 0
                     self.stepsToMicrons[i + 1] = sPM
+
+                    # Special correction for z-axis calibration
+                    if (i == 2):
+                        # Because z-axis uses 1000 steps instead of 100,
+                        # adjust calibration factor to match actual scaling
+                        self.stepsToMicrons[3] *= 10
+
+                    # Move on to next axis
                     self._calibration_axis += 1
                     self._calibration_phase = "forward"
                     self._calibration_step = 0
                     start_next_move()
             else:
+                # Otherwise → just increment step count and move again
                 self._calibration_step = count
                 start_next_move()
-    
-        # Save the callback so finishMove can call it
+        
+        # Save callback so finishMove() can trigger it
         self._calibration_callback = calibration_finish_callback
-    
+        
         # Start the first move
         start_next_move()
 
 
 
 
+
     
     
-    def drawZigZag(self, stepSize, gridSize, pause, row=0, step=0, direction=1):
-        if self.stopped:
+    def drawZigZag(self, stepSize, gridSize, pause, row=0, step=0, direction=1): #Draws a zigzag via recursion
+        if self.stopped: #Stops the zigzag movement if stop button is pressed
             self.status.config(text="Zigzag stopped")
             return
         
-        if row >= gridSize:
+        if row >= gridSize: #Zigzag is complete once the height of the grid is reached
             self.status.config(text="Zigzag complete")
             return
 
-        if step < gridSize:
+        if step < gridSize: #When the step is lower than gridSize, it continues to move in the x-direction
             # Move along X axis
-            self.xStepsVar.set(int(stepSize * self.stepsToMicrons[1] * direction))
-            self.yStepsVar.set(0)
-            self.zStepsVar.set(0)
+            self.xStepsVar.set(int(stepSize * self.stepsToMicrons[1] * direction)) #Sets the variable that move_to_inputs() will read, with the stepsToMicrons being used to convert the amount of steps needed to move one micron and the direction when the x direction needs to be reversed
+            self.yStepsVar.set(0) #YZ axes don't move when x axis moves
+            self.zStepsVar.set(0) #YZ axes don't move when x axis moves
             self.move_to_inputs()
             
             # Schedule next step after a delay (adjust delay as needed)
-            self.after(int(pause * 1000), lambda: self.drawZigZag(stepSize, gridSize, pause, row, step + stepSize, direction))
+            self.after(int(pause * 1000), lambda: self.drawZigZag(stepSize, gridSize, pause, row, step + stepSize, direction)) #Runs the recursive call, with a pause defined by the user
             
-        else:
-            # Move down one step in Z axis and switch direction
+        else: #When x-axis gets the border of the grid
+            # Move up one step in Y axis and switch direction
             self.xStepsVar.set(0)
-            self.yStepsVar.set(int(stepSize * self.stepsToMicrons[2]))
-            self.zStepsVar.set(int(stepSize * self.stepsToMicrons[3] * 10))
+            self.yStepsVar.set(int(stepSize * self.stepsToMicrons[2])) #Conversion for the 2nd stage
+            self.zStepsVar.set(int(stepSize * self.stepsToMicrons[3])) #Conversion for the 3rd stage
             self.move_to_inputs()
     
             # Start next row, reverse direction
@@ -530,7 +547,7 @@ class Page(tk.Frame):
 
 
 
-def getPos(client, channel):
+def getPos(client, channel): #Helper function that gets the current position of a specified channel
     resp = command(client, {"method": "getPosition",
                      "params": [str(channel)],
                      "jsonrpc": "2.0",
@@ -550,7 +567,7 @@ def command(client, rpc):
     response_json = json.loads(response)
     return response_json
 
-def waitMovement(client, channel, target, tolerance=1e-6, timeout=10, interval=0.05):
+def waitMovement(client, channel, target, tolerance=1e-6, timeout=30, interval=0.05): #Waits a set amount of time so that movement finishes
     """
     Wait until stage is either:
       - at the same micron number (within tolerance), OR
@@ -569,7 +586,7 @@ def waitMovement(client, channel, target, tolerance=1e-6, timeout=10, interval=0
 
         # Get actual position
         actual = float(getPos(client, channel))
-        error = abs(round(actual, 6) - round(target, 6))
+        error = abs(round(actual, 6) - round(target, 6)) #See if the position is within the same micron as its target
 
         print(f"Target={target:.6f}, Actual={actual:.6f}, Error={error:.6f}, Busy={busy}")
 
@@ -591,65 +608,6 @@ def waitMovement(client, channel, target, tolerance=1e-6, timeout=10, interval=0
     return False
 
         
-def goToOriginalPosition(client):
-    #Establish a setStopLimit
-    rpc = {"method": "setStopLimit",
-           "params": ["1", "0.00001"],
-           "jsonrpc": "2.0",
-           "id": 0}
-    resp = command(client, rpc)
-    rpc = {"method": "setStopLimit",
-           "params": ["2", "0.00001"],
-           "jsonrpc": "2.0",
-           "id": 0}
-    resp = command(client, rpc)
-    rpc = {"method": "setStopLimit",
-           "params": ["3", "0.00001"],
-           "jsonrpc": "2.0",
-           "id": 0}
-    resp = command(client, rpc)
-    
-    #Activate Channel 1 relay
-    rpc = {"method": "setDriveChannel",
-           "params": ["1"],
-           "jsonrpc": "2.0",
-           "id": 0}
-    resp = command(client, rpc)
-    rpc = {"method": "goPosition",
-           "params": ["1", "0.001270845668667555", "300", "1500"],
-           "jsonrpc": "2.0",
-           "id": 0}
-    resp = command(client, rpc)
-    waitMovement(client, 1, 0.001270845668667555)
-    
-    #Activate Channel 2 relay
-    rpc = {"method": "setDriveChannel",
-           "params": ["2"],
-           "jsonrpc": "2.0",
-           "id": 0}
-    resp = command(client, rpc)
-    rpc = {"method": "goPosition",
-           "params": ["2", "0.0017568406247109166", "300", "1500"],
-           "jsonrpc": "2.0",
-           "id": 0}
-    resp = command(client, rpc)
-    waitMovement(client, 2, 0.0017568406247109166)
-
-    
-    #Activate Channel 3 relay
-    rpc = {"method": "setDriveChannel",
-           "params": ["3"],
-           "jsonrpc": "2.0",
-           "id": 0}
-    resp = command(client, rpc)
-    rpc = {"method": "goPosition",
-           "params": ["3", "0.003075189428376382", "300", "1500"],
-           "jsonrpc": "2.0",
-           "id": 0}
-    resp = command(client, rpc)
-    waitMovement(client, 3, 0.003075189428376382)
-
-
 
 def initWindow(client): #Tkinter Winodw Set-up
     root = tk.Tk()
@@ -666,9 +624,9 @@ def initWindow(client): #Tkinter Winodw Set-up
     root.protocol("WM_DELETE_WINDOW", _on_close)
     root.mainloop()
 
-def main():
-    IP = "192.168.0.100"
-    PORT = 6002
+def main(): #Connecting to NP Drive
+    IP = "192.168.0.100" #Given on the NP Drive
+    PORT = 6002 #Given on the NP Drive
     
     #Connection
     try:
@@ -683,31 +641,6 @@ def main():
 
     initWindow(connect)
     
-    rpc = {
-        "method": "getPosition",
-        "params": ["1"],
-        "jsonrpc": "2.0",
-        "id": 0,
-        }
-    resp = command(connect, rpc)
-    print("Return value: " + str(resp["result"]) + " micrometers")
-    rpc = {
-        "method": "getPosition",
-        "params": ["2"],
-        "jsonrpc": "2.0",
-        "id": 0,
-        }
-    resp = command(connect, rpc)
-    print("Return value: " + str(resp["result"]) + " micrometers")
-    rpc = {
-        "method": "getPosition",
-        "params": ["3"],
-        "jsonrpc": "2.0",
-        "id": 0,
-        }
-    resp = command(connect, rpc)
-    print("Return value: " + str(resp["result"]) + " micrometers")
-
 if __name__ == "__main__":
     try:
         main()
