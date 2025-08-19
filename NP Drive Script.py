@@ -709,8 +709,8 @@ def main():
     print("Return value: " + str(resp["result"]) + " micrometers")
 
 if __name__ == "__main__":
-    #try:
+    try:
         main()
-    #except:
-        #print("Program closed")
+    except:
+        print("Program closed")
     
